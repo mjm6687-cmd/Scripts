@@ -367,6 +367,12 @@ return {
 	-- point on the curve instead of travelling there.
 	-- This makes it follow. LOWER = heavier and softer.
 
+	-- AFTER THE KILL the body stays in the hand for a moment, then the arm tosses
+	-- it aside (about two seconds from kill to landing). How long it's held, how
+	-- long the swing takes and how hard it's tossed live at the top of
+	-- CreatureGrabServer (CORPSE_HOLD_TIME, CORPSE_TOSS_TIME, CORPSE_TOSS_FORWARD /
+	-- SIDE / UP). CORPSE_HOLD = false puts back the instant drop.
+
 	-- Eating is HOLD-to-eat all the way through: let go of left click during the
 	-- chewing and it aborts ? the victim survives, stays in your hand, and the arm
 	-- lowers. Right click still drops them outright, mid-chew included.

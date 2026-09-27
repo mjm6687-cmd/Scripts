@@ -100,6 +100,16 @@ local DEFAULTS = {
 -- overshoot of the speed ramp and the slope/lean wobble at a normal walk.
 local WALK_SPEED_SLACK = 1.5
 
+-- The corpse toss swing (timing comes from the server, see CreatureGrabServer's
+-- CORPSE_TOSS_TIME). Rise: 0 = straight down, 90 = level. Yaw: negative = out
+-- to the right, away from the body.
+local TOSS_BACK_PORTION = 0.4  -- first 40% of the toss swings back, the rest out
+local TOSS_BACK_RISE = 35      -- deg. low and...
+local TOSS_BACK_YAW = -110     -- ...out to the side, a little behind
+local TOSS_OUT_RISE = 100      -- deg. just above level...
+local TOSS_OUT_YAW = -25       -- ...and forward, slightly to the right
+local TOSS_STIFFNESS_MULT = 1.6 -- the normal arm spring is too lazy to finish in time
+
 local player = Players.LocalPlayer
 local CreatureUtil
 local aimRemote: RemoteEvent?
@@ -657,20 +667,29 @@ function System.init(ctx)
 			if typeof(victim) ~= "Instance" or not victim:IsA("Model") or not victim.Parent then
 				return
 			end
-			if typeof(launchCFrame) ~= "CFrame" or typeof(velocity) ~= "Vector3" then
+			if typeof(velocity) ~= "Vector3" then
 				return
 			end
 
 			-- The grab weld is gone on the server; make sure it's gone here too
 			-- before moving anything, or the body is yanked back to the hand.
+			-- CreatureCorpseWeld is the one holding a body after a kill.
 			local char = player.Character
 			local arm = char and char:FindFirstChild("Right Arm")
-			local weld = arm and arm:FindFirstChild("CreatureGrabWeld")
-			if weld then
-				weld:Destroy()
+			if arm then
+				for _, name in ipairs({ "CreatureGrabWeld", "CreatureCorpseWeld" }) do
+					local weld = arm:FindFirstChild(name)
+					if weld then
+						weld:Destroy()
+					end
+				end
 			end
 
-			victim:PivotTo(launchCFrame)
+			-- No CFrame = the corpse toss: it leaves from exactly where the hand has
+			-- it, rather than being moved to a launch point first.
+			if typeof(launchCFrame) == "CFrame" then
+				victim:PivotTo(launchCFrame)
+			end
 			for _, part in ipairs(victim:GetDescendants()) do
 				if part:IsA("BasePart") and not part.Anchored then
 					part.AssemblyLinearVelocity = velocity
@@ -870,7 +889,11 @@ function System.update(dt: number)
 		local targetShoulderOffset = Vector3.zero
 		local stiffness = cfg.armReturnStiffness
 
+		-- A body kept in the hand after a kill counts as holding for the POSE (arm
+		-- out, drooping under the weight) and to stop a grab, but it can't be eaten,
+		-- dropped or thrown -- those all check CreatureGrabbing on its own.
 		local holding = rig:GetAttribute("CreatureGrabbing") == true
+			or rig:GetAttribute("CreatureHoldingCorpse") == true
 
 		-- eatCharge > 0 keeps us here while the arm comes down from a bite;
 		-- without it, letting go dropped straight to rest and the eat pose
@@ -958,6 +981,34 @@ function System.update(dt: number)
 				targetRise = targetRise + (eatRise - targetRise) * charge
 				targetYaw = blendAngle(targetYaw, eatYaw, charge * eatYawWeight)
 				targetShoulderOffset = eatOffset * charge
+			end
+		end
+
+		--[[
+			THE CORPSE TOSS. After a kill the body stays in the hand, then the server
+			publishes CorpseTossStart and the arm lobs it aside: a short swing down
+			and back out to the side, then up and forward, letting go on the way up.
+
+			Fed in as spring TARGETS, not written over the springs like the throw.
+			The throw wants violence; this wants weight, and the heavy springs give
+			the swing its lazy arc for free. Every client runs it from the same
+			timestamp, so everyone sees the same toss.
+		--]]
+		local tossStart = rig:GetAttribute("CorpseTossStart")
+		if typeof(tossStart) == "number" then
+			local tossTime = rig:GetAttribute("CorpseTossTime")
+			if typeof(tossTime) ~= "number" then
+				tossTime = 0.55
+			end
+			local t = workspace:GetServerTimeNow() - tossStart
+			if t >= 0 and t < tossTime then
+				if t / math.max(tossTime, 0.05) < TOSS_BACK_PORTION then
+					targetRise, targetYaw, targetExtend = math.rad(TOSS_BACK_RISE), math.rad(TOSS_BACK_YAW), 0.8
+				else
+					targetRise, targetYaw, targetExtend = math.rad(TOSS_OUT_RISE), math.rad(TOSS_OUT_YAW), 1
+				end
+				targetShoulderOffset = Vector3.zero
+				stiffness = cfg.armStiffness * TOSS_STIFFNESS_MULT
 			end
 		end
 

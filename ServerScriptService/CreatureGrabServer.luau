@@ -176,6 +176,35 @@ local GRAB_HOLD_ROTATION = CFrame.Angles(
 local GRAB_HOLD_OFFSET = CFrame.new(GRAB_HOLD_POSITION) * GRAB_HOLD_ROTATION
 
 --[[
+	HOLDING THE BODY AFTER THE KILL.
+
+	The corpse isn't let go the instant the victim dies. It stays in the hand for
+	CORPSE_HOLD_TIME, then the arm swings out and tosses it aside -- a lob, not a
+	throw. Kill to landing is about two seconds.
+
+	Held the same way a living victim is: welded to the Right Arm, weightless,
+	non-colliding, and simulated by the creature's own computer, so it sits in the
+	hand the creature's player actually sees (the arm pose is client-side). The
+	head is already gone by then, so the hand closes on the neck stump.
+
+	The swing itself is animated by the Arm system from CorpseTossStart, the same
+	way ChewStart drives the chew jolts.
+--]]
+local CORPSE_HOLD = true            -- false = the old behaviour: drops at the kill
+local CORPSE_HOLD_TIME = 1.2        -- s in the hand after the kill, before the toss starts
+local CORPSE_TOSS_TIME = 0.55       -- s the toss swing takes
+local CORPSE_TOSS_RELEASE_AT = 0.7  -- 0-1 through the swing: when the body leaves the hand
+local CORPSE_TOSS_FORWARD = 9       -- studs/s launch speed forward...
+local CORPSE_TOSS_SIDE = 6          -- ...out to the right, the tossing arm's side...
+local CORPSE_TOSS_UP = 11           -- ...and up. Small on purpose: set aside, not hurled.
+local CORPSE_TOSS_NO_COLLIDE = 0.3  -- s before it's solid again, to clear the creature
+
+-- Where the hand closes on the headless body, in the torso's own space. The head
+-- sat 1.5 above the torso's centre, so this keeps the grip exactly where it was
+-- while they were alive and the body doesn't jump in the hand at the kill.
+local CORPSE_GRIP = Vector3.new(0, 1.5, 0) + GRAB_LIMB_GRIP
+
+--[[
 	The raise is no longer timed here.
 
 	Eating is hold-to-charge now: the client lifts the victim toward the mouth in
@@ -646,6 +675,25 @@ end
 
 local runAction  -- forward declaration; defined once doGrab/doEat/releaseVictim exist
 
+-- Bodies held in the hand after the kill. See holdCorpse.
+local heldCorpses: { [Model]: any } = {}
+
+-- C0 = where on the ARM the grip is. An Attachment placed by hand in Studio
+-- beats any number we could pick here, so it wins when present.
+local function gripC0(arm: BasePart): CFrame
+	local holdAtt = arm:FindFirstChild(GRAB_HOLD_ATTACHMENT)
+	if holdAtt and holdAtt:IsA("Attachment") then
+		if GRAB_HOLD_ATTACHMENT_ROTATION then
+			return holdAtt.CFrame -- position AND orientation from the attachment
+		end
+		-- Position from the attachment, rotation from the constants. Lets you
+		-- drag the attachment anywhere without its own orientation (which
+		-- starts at 0,0,0 and looks flat) wrecking the pose.
+		return CFrame.new(holdAtt.Position) * GRAB_HOLD_ROTATION
+	end
+	return GRAB_HOLD_OFFSET
+end
+
 local function doGrab(player: Player?, rig: Model)
 	if grabs[rig] then
 		return
@@ -821,21 +869,7 @@ local function doGrab(player: Player?, rig: Model)
 	weld.Part0 = arm
 	weld.Part1 = heldPart
 
-	-- C0 = where on the ARM the grip is. An Attachment placed by hand in Studio
-	-- beats any number we could pick here, so it wins when present.
-	local holdAtt = arm:FindFirstChild(GRAB_HOLD_ATTACHMENT)
-	if holdAtt and holdAtt:IsA("Attachment") then
-		if GRAB_HOLD_ATTACHMENT_ROTATION then
-			weld.C0 = holdAtt.CFrame -- position AND orientation from the attachment
-		else
-			-- Position from the attachment, rotation from the constants. Lets you
-			-- drag the attachment anywhere without its own orientation (which
-			-- starts at 0,0,0 and looks flat) wrecking the pose.
-			weld.C0 = CFrame.new(holdAtt.Position) * GRAB_HOLD_ROTATION
-		end
-	else
-		weld.C0 = GRAB_HOLD_OFFSET
-	end
+	weld.C0 = gripC0(arm)
 
 	-- C1 = where on the held part the hand closes. For a limb that's near its top
 	-- end; for the root fallback it's the old offset up the torso, which put the
@@ -1004,14 +1038,10 @@ end
 	The small velocity matters: a body that appears and drops from a dead stop
 	reads as a spawned prop. One already moving reads as something released.
 --]]
-local function dropCorpseAt(corpse: Model, atCFrame: CFrame)
-	if not (corpse and corpse.Parent) then
-		return
-	end
-
-	-- Any weld cloned along with the body still points at the creature's arm, which
-	-- would leave the corpse hanging off it forever. The original is destroyed in
-	-- releaseVictim; this is its twin inside the clone.
+-- Any weld cloned along with the body still points at the creature's arm, which
+-- would leave the corpse hanging off it forever. The original is destroyed in
+-- releaseVictim; this is its twin inside the clone.
+local function stripOutsideWelds(corpse: Model)
 	for _, d in ipairs(corpse:GetDescendants()) do
 		if d:IsA("Weld") or d:IsA("WeldConstraint") then
 			local p0, p1 = d.Part0, d.Part1
@@ -1022,6 +1052,14 @@ local function dropCorpseAt(corpse: Model, atCFrame: CFrame)
 			end
 		end
 	end
+end
+
+local function dropCorpseAt(corpse: Model, atCFrame: CFrame)
+	if not (corpse and corpse.Parent) then
+		return
+	end
+
+	stripOutsideWelds(corpse)
 
 	local ok = pcall(function()
 		corpse:PivotTo(atCFrame * CFrame.new(CORPSE_DROP_OFFSET))
@@ -1035,6 +1073,220 @@ local function dropCorpseAt(corpse: Model, atCFrame: CFrame)
 			d.AssemblyLinearVelocity = CORPSE_DROP_VELOCITY
 		end
 	end
+end
+
+-- Near weightless, same as a held victim. See the note on LIGHT in doGrab.
+local CORPSE_LIGHT = PhysicalProperties.new(0.01, 0.3, 0)
+
+--[[
+	Let go of the body held after a kill.
+
+	`tossed` = the swing reached its release point: the body gets its weight back
+	and a gentle push out to the side. Otherwise (the creature died, the body was
+	cleaned up) it's simply let go where it is.
+
+	The push is delivered by the creature's own client over CreatureThrowLaunch,
+	for the same reason the throw is: that computer has been simulating the body
+	the whole time it was in the hand, and only it knows where the hand really is.
+	No launch CFrame is sent, so the body leaves from exactly where it was.
+--]]
+local function releaseCorpse(rig: Model, tossed: boolean)
+	local rec = heldCorpses[rig]
+	if not rec then
+		return
+	end
+	heldCorpses[rig] = nil
+
+	if rec.weld then
+		rec.weld:Destroy()
+	end
+	if rig.Parent then
+		rig:SetAttribute("CreatureHoldingCorpse", nil)
+	end
+
+	local corpse = rec.corpse
+	if not corpse.Parent then
+		return
+	end
+
+	for part in pairs(rec.savedMassless) do
+		if part.Parent then
+			part.Massless = false
+		end
+	end
+	for part, props in pairs(rec.savedPhysics) do
+		if part.Parent then
+			part.CustomPhysicalProperties = props or nil
+		end
+	end
+	for joint, torque in pairs(rec.savedFriction) do
+		if joint.Parent then
+			joint.MaxFrictionTorque = torque
+		end
+	end
+
+	-- Everything that was solid before the hold, plus anything the ragdoll tried
+	-- to switch on during it (see the Heartbeat loop at the bottom). A corpse with
+	-- no collision falls straight through the floor.
+	local function solidAgain()
+		for part in pairs(rec.savedCollide) do
+			if part.Parent then
+				part.CanCollide = true
+			end
+		end
+		for _, d in ipairs(corpse:GetDescendants()) do
+			if d:IsA("BasePart") and d.Name == "ColliderPart" then
+				d.CanCollide = true
+			end
+		end
+	end
+
+	if not tossed then
+		solidAgain()
+		setBodyOwner(rec.parts, "auto")
+		return
+	end
+
+	local root = rig:FindFirstChild("HumanoidRootPart")
+	local facing = (root and root:IsA("BasePart")) and root.CFrame or CFrame.new()
+	local velocity = facing.LookVector * CORPSE_TOSS_FORWARD
+		+ facing.RightVector * CORPSE_TOSS_SIDE
+		+ Vector3.yAxis * CORPSE_TOSS_UP
+	-- A little tumble, much less than a throw's.
+	local spin = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 3
+
+	local owner = rec.owner
+	if owner and owner.Parent then
+		-- false = no launch CFrame: push it from wherever it is on their screen.
+		launchRemote:FireClient(owner, corpse, false, velocity, spin)
+	else
+		setBodyOwner(rec.parts, nil)
+		for _, part in ipairs(rec.parts) do
+			if part.Parent and not part.Anchored then
+				part.AssemblyLinearVelocity = velocity
+				part.AssemblyAngularVelocity = spin
+			end
+		end
+	end
+
+	-- Clear of the creature first, THEN solid, or it bounces off the creature's
+	-- own legs on the way out.
+	task.delay(CORPSE_TOSS_NO_COLLIDE, function()
+		if corpse.Parent then
+			solidAgain()
+		end
+	end)
+	-- Once it has settled, physics goes back to whoever Roblox picks.
+	task.delay(3, function()
+		if corpse.Parent then
+			setBodyOwner(rec.parts, "auto")
+		end
+	end)
+end
+
+--[[
+	Keep the body in the hand after the kill, then toss it. Returns false if it
+	can't be held (no arm, no torso, already holding something), and the caller
+	drops it the old way instead.
+--]]
+local function holdCorpse(rig: Model, owner: Player?, corpse: Model): boolean
+	if heldCorpses[rig] or grabs[rig] or not rig.Parent or not corpse.Parent then
+		return false
+	end
+
+	local arm = rig:FindFirstChild("Right Arm")
+	if not (arm and arm:IsA("BasePart")) then
+		return false
+	end
+
+	local torso = corpse:FindFirstChild("Torso")
+		or corpse:FindFirstChild("UpperTorso")
+		or corpse:FindFirstChild("HumanoidRootPart")
+	if not (torso and torso:IsA("BasePart")) then
+		return false
+	end
+
+	stripOutsideWelds(corpse)
+
+	local rec = {
+		corpse = corpse,
+		owner = owner,
+		parts = {},
+		savedCollide = {},
+		savedMassless = {},
+		savedPhysics = {},
+		savedFriction = {},
+	}
+
+	for _, d in ipairs(corpse:GetDescendants()) do
+		if d:IsA("BasePart") then
+			table.insert(rec.parts, d)
+			-- An anchored part joined to the body would pin the CREATURE in place
+			-- through the weld. A corpse has no reason to be anchored anyway.
+			if d.Anchored then
+				d.Anchored = false
+			end
+			if d.CanCollide then
+				rec.savedCollide[d] = true
+				d.CanCollide = false
+			end
+			if not d.Massless then
+				rec.savedMassless[d] = true
+				d.Massless = true
+			end
+			rec.savedPhysics[d] = d.CustomPhysicalProperties or false
+			d.CustomPhysicalProperties = CORPSE_LIGHT
+		elseif d:IsA("BallSocketConstraint") and d.MaxFrictionTorque > 0 then
+			rec.savedFriction[d] = d.MaxFrictionTorque
+			d.MaxFrictionTorque = 0
+		end
+	end
+
+	local weld = Instance.new("Weld")
+	weld.Name = "CreatureCorpseWeld"
+	weld.Part0 = arm
+	weld.Part1 = torso
+	weld.C0 = gripC0(arm)
+	weld.C1 = CFrame.new(CORPSE_GRIP)
+	weld.Parent = arm
+	rec.weld = weld
+
+	-- The creature's computer runs the body, same as the carry, so it sits in the
+	-- hand that player sees and replicates to everyone from there.
+	setBodyOwner(rec.parts, owner)
+
+	heldCorpses[rig] = rec
+	rig:SetAttribute("CreatureHoldingCorpse", true)
+
+	corpse.AncestryChanged:Connect(function(_, parent)
+		if not parent and heldCorpses[rig] == rec then
+			releaseCorpse(rig, false)
+		end
+	end)
+
+	task.delay(CORPSE_HOLD_TIME, function()
+		if heldCorpses[rig] ~= rec then
+			return
+		end
+
+		local start = workspace:GetServerTimeNow()
+		rig:SetAttribute("CorpseTossTime", CORPSE_TOSS_TIME)
+		rig:SetAttribute("CorpseTossStart", start)
+
+		task.delay(CORPSE_TOSS_TIME * math.clamp(CORPSE_TOSS_RELEASE_AT, 0, 1), function()
+			if heldCorpses[rig] == rec then
+				releaseCorpse(rig, true)
+			end
+		end)
+
+		task.delay(CORPSE_TOSS_TIME + 0.5, function()
+			if rig.Parent and rig:GetAttribute("CorpseTossStart") == start then
+				rig:SetAttribute("CorpseTossStart", nil)
+			end
+		end)
+	end)
+
+	return true
 end
 
 --[[
@@ -1393,6 +1645,7 @@ local function doEat(rig: Model)
 
 		-- Grabbed before the release, because releaseVictim clears the record.
 		local victim = grabs[rig].victim
+		local owner = grabs[rig].owner
 
 		playCreatureSound(rig, "Eat")
 		emitBlood(rig, "Kill")
@@ -1416,8 +1669,10 @@ local function doEat(rig: Model)
 		if victim then
 			captureCorpse(victim, near, function(corpse)
 				-- Both fixes land on the CLONE, because the clone is the body the
-				-- player can actually see.
-				if dropAt then
+				-- player can actually see. It stays in the hand for a moment and is
+				-- tossed aside; if it can't be held, it drops from the mouth.
+				local held = CORPSE_HOLD and holdCorpse(rig, owner, corpse)
+				if not held and dropAt then
 					dropCorpseAt(corpse, dropAt)
 				end
 				if DECAPITATE_ON_EAT then
@@ -2069,6 +2324,12 @@ runAction = function(rig: Model, action: string, player: Player?, arg: any?, arg
 		end
 	end
 
+	-- A body still in the hand from the last kill: nothing new goes in it until
+	-- that one has been tossed.
+	if heldCorpses[rig] and (action == "Grab" or action == "Eat") then
+		return
+	end
+
 	-- Mid wind-up: committed. Nothing else until the body has left the hand.
 	local current = grabs[rig]
 	if current and current.throwing then
@@ -2201,6 +2462,7 @@ end)
 -- ============================================================
 CollectionService:GetInstanceRemovedSignal(CreatureUtil.TAG):Connect(function(rig)
 	releaseVictim(rig, false)
+	releaseCorpse(rig, false)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
@@ -2208,6 +2470,11 @@ Players.PlayerRemoving:Connect(function(player)
 	for rig in pairs(grabs) do
 		if Players:GetPlayerFromCharacter(rig) == player then
 			releaseVictim(rig, false)
+		end
+	end
+	for rig in pairs(heldCorpses) do
+		if Players:GetPlayerFromCharacter(rig) == player then
+			releaseCorpse(rig, false)
 		end
 	end
 end)
@@ -2231,6 +2498,32 @@ RunService.Heartbeat:Connect(function()
 					local ok, current = pcall(part.GetNetworkOwner, part)
 					if ok and current ~= grab.owner then
 						pcall(part.SetNetworkOwner, part, grab.owner)
+					end
+				end
+			end
+		end
+	end
+
+	-- Same rules for a body held after the kill. The ragdoll builds the corpse
+	-- (and turns its colliders on) around the moment it's picked up, so this is
+	-- what keeps it from dragging the creature about. Anything switched on here
+	-- is remembered, so it comes back on when the body is tossed.
+	for rig, rec in pairs(heldCorpses) do
+		local hum = rig:FindFirstChildOfClass("Humanoid")
+		if not rig.Parent or not hum or hum.Health <= 0 then
+			releaseCorpse(rig, false)
+			continue
+		end
+		for _, part in ipairs(rec.parts) do
+			if part.Parent then
+				if part.CanCollide then
+					rec.savedCollide[part] = true
+					part.CanCollide = false
+				end
+				if rec.owner and not part.Anchored then
+					local ok, current = pcall(part.GetNetworkOwner, part)
+					if ok and current ~= rec.owner then
+						pcall(part.SetNetworkOwner, part, rec.owner)
 					end
 				end
 			end
