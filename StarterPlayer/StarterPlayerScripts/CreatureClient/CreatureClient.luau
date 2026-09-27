@@ -10,7 +10,7 @@
 -- ============================================================
 --   * ONE CollectionService hook, instead of nine
 --   * ONE RenderStepped loop, instead of six
---   * ONE config load per creature, cached — they were each requiring the rig's
+--   * ONE config load per creature, cached ï¿½ they were each requiring the rig's
 --     CreatureConfig separately
 --   * ERROR ISOLATION. A system that throws is switched off and reported; the
 --     others carry on. In a single flat script one bad line took down everything
@@ -25,7 +25,7 @@
 -- A system module returns a table. Every field is optional except `scope`.
 --
 --   scope = "rig"    runs for EVERY creature in the world, local or not
---                    (footsteps, head turn, arm, eyes — things others see)
+--                    (footsteps, head turn, arm, eyes ï¿½ things others see)
 --   scope = "local"  runs only while YOU are a creature
 --                    (vision, thermal, camera, mouse, roar input)
 --
@@ -61,6 +61,7 @@ local ORDER = {
 	"Thermal",
 	"Roar",
 	"RoarEffects",
+	"RoarWave",
 	"CombatCue",
 }
 
@@ -103,7 +104,7 @@ end
 -- SAFETY
 -- ============================================================
 -- A system that errors is disabled rather than left to throw every frame. One
--- warning, not sixty a second — a spamming Output is how you lose the actual
+-- warning, not sixty a second ï¿½ a spamming Output is how you lose the actual
 -- error in the noise.
 local dead = {}
 
@@ -115,7 +116,7 @@ local function guard(system, fnName, ...)
 	local ok, err = pcall(fn, ...)
 	if not ok then
 		dead[system] = true
-		warn(("[CreatureClient] '%s' disabled — error in %s: %s")
+		warn(("[CreatureClient] '%s' disabled ï¿½ error in %s: %s")
 			:format(system.name, fnName, tostring(err)))
 	end
 end

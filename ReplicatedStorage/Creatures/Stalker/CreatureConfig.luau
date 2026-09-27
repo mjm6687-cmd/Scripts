@@ -612,6 +612,30 @@ return {
 	roarFxCombatMusic = true,
 	roarFxCombatMinIntensity = 0.35,
 
+	--[[
+		---- THE VISIBLE SHOCKWAVE (read by Systems > RoarWave) ----
+		ForceField spheres bursting out from the mouth, seen by everyone, plus a
+		ripple along the ground for the big roars. Each roar has its own look:
+		R a huge slow layered wave, C one faint small pulse, V a fast hard red one.
+
+		roarWave = false switches it off for this creature. roarWaves overrides
+		any of these per roar; anything left out keeps the built-in value:
+
+		  radius        studs the outermost shell reaches
+		  duration      seconds to get there and fade
+		  rings         how many shells
+		  ringGap       seconds between shells
+		  ringShrink    each later shell's size vs the one before (0-1)
+		  color         the ForceField glow colour
+		  transparency  how see-through each shell starts (1 = invisible)
+		  groundRing    true/false: the ripple along the floor
+		  groundRadius  how far the ripple reaches
+
+		e.g. roarWaves = { [1] = { radius = 250, color = Color3.fromRGB(255, 255, 255) } }
+	--]]
+	roarWave = true,
+	roarWaves = {},
+
 	-- ---- roar animations ----
 	-- ONE per roar, in the rig's Animations folder: Roar1, Roar2, Roar3.
 	-- (Falls back to a single "Roar" if a numbered one is missing.)

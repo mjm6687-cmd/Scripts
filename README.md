@@ -38,6 +38,7 @@ StarterPlayer
             ├── NightVision     ModuleScript
             ├── Roar            ModuleScript
             ├── RoarEffects     ModuleScript
+            ├── RoarWave        ModuleScript  (new: visible roar shockwave)
             ├── Thermal         ModuleScript
             └── Vision          ModuleScript
 ```

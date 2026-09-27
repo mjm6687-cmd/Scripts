@@ -201,6 +201,16 @@ if not fxRemote then
 	fxRemote.Parent = ReplicatedStorage
 end
 
+-- "This creature roared roar N, here" -- to EVERY player, so each can draw the
+-- visible shockwave (the RoarWave client system). Just the announcement; each
+-- client builds and animates the spheres itself, which is what keeps them smooth.
+local waveRemote = ReplicatedStorage:FindFirstChild("CreatureRoarWaveRemote")
+if not waveRemote then
+	waveRemote = Instance.new("RemoteEvent")
+	waveRemote.Name = "CreatureRoarWaveRemote"
+	waveRemote.Parent = ReplicatedStorage
+end
+
 local FX_KEYS = {
 	"roarFxAttack", "roarFxDecay", "roarFxColorCurve", "roarFxBlurCurve",
 	"roarFxBloomCurve", "roarFxFovCurve", "roarFxSaturation",
@@ -578,6 +588,12 @@ local function doRoar(rig: Model, index: number, movingHint: boolean?)
 	-- Published so anything else can react ? breathing could hold off, a HUD
 	-- could show a cooldown.
 	rig:SetAttribute("CreatureRoaring", true)
+
+	-- The visible shockwave, for everyone. The position goes along because a
+	-- player too far away to have the creature streamed in still sees the wave.
+	-- Whether this creature has waves, and how big, is read from its
+	-- CreatureConfig on each client.
+	waveRemote:FireAllClients(rig, index, part.Position)
 
 	--[[
 		THE VICTIM REACTION.
