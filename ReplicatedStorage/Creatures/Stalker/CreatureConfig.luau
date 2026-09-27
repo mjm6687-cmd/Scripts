@@ -444,6 +444,34 @@ return {
 	throwWhipYaw = 12,        -- deg. Slightly across the body
 
 	-- =====================
+	-- TORSO LAYER  (read by Systems > Arm)
+	-- =====================
+	-- The upper body moves with the arm: it twists and leans back as a throw
+	-- winds up, snaps round and leans into the whip, leans into a reach, leans
+	-- away from someone being carried, hunches into the bite. It bends at the
+	-- WAIST: the hips are turned back by the same amount, so the legs stay
+	-- planted and keep walking. Everyone sees it.
+	-- Yaw: negative turns the right shoulder back. Lean: negative = forward.
+	torsoLayer = true,        -- false = the torso never moves for the arm
+	torsoFollowYaw = 0.4,     -- share of the arm's swing the shoulders turn with
+	torsoMaxYaw = 40,         -- deg, either way
+	torsoMaxLeanForward = 20, -- deg
+	torsoMaxLeanBack = 15,    -- deg
+	torsoMaxRoll = 10,        -- deg of side lean
+	torsoStiffness = 30,      -- LOWER = heavier, slower body. 15 sluggish, 60 snappy
+	torsoDamping = 8,
+	torsoMaxSpeed = 300,      -- deg/s
+	torsoThrowStiffness = 110, -- during a throw, so the body keeps up with the whip
+	torsoWindupYaw = -30,     -- arm cocked back: right shoulder pulled back...
+	torsoWindupLean = 10,     -- ...and leaning back
+	torsoWhipYaw = 25,        -- the snap: shoulders round the other way...
+	torsoWhipLean = -14,      -- ...leaning forward into it
+	torsoReachLean = -7,      -- leaning into an empty-handed reach
+	torsoCarryRoll = 4,       -- leaning away from the weight in the hand
+	torsoEatLean = -10,       -- hunching into the bite
+	torsoChewJolt = 0.4,      -- share of each chew crunch the whole body takes
+
+	-- =====================
 	-- HUM  (read by Systems > Hum)
 	-- =====================
 	-- A quiet background hum only you hear while you're the creature. Fades in on

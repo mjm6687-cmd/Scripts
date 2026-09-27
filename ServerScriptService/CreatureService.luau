@@ -238,6 +238,22 @@ function CreatureService.Morph(player: Player, creatureName: string)
 		if shoulder and shoulder:IsA("Motor6D") then
 			rig:SetAttribute("RightShoulderBaseC0", shoulder.C0)
 		end
+
+		-- The hips, for the Arm system's torso layer: it counter-rotates them so
+		-- the legs stay planted while the upper body twists.
+		for _, hipName in ipairs({ "Left Hip", "Right Hip" }) do
+			local hip = rigTorso:FindFirstChild(hipName)
+			if hip and hip:IsA("Motor6D") then
+				rig:SetAttribute(string.gsub(hipName, " ", "") .. "BaseC0", hip.C0)
+			end
+		end
+	end
+
+	-- And the root joint itself, which the torso layer turns.
+	local rigRoot = rig:FindFirstChild("HumanoidRootPart")
+	local rootJoint = rigRoot and rigRoot:FindFirstChild("RootJoint")
+	if rootJoint and rootJoint:IsA("Motor6D") then
+		rig:SetAttribute("RootJointBaseC0", rootJoint.C0)
 	end
 
 	rig:PivotTo(spawnCF)

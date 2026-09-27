@@ -99,6 +99,27 @@ local DEFAULTS = {
 	throwWindupExtend = 0.35,
 	throwWhipRise = 70,      -- deg. Where the arm ends up after the snap: forward and down
 	throwWhipYaw = 12,       -- deg. Slightly across the body, like a real follow-through
+
+	-- TORSO LAYER: the upper body moving with the arm. See the TORSO section.
+	-- Yaw: negative turns the right shoulder BACK. Lean: negative = forward.
+	torsoLayer = true,        -- false = the torso never moves for the arm
+	torsoFollowYaw = 0.4,     -- how much of the arm's swing the shoulders turn with
+	torsoMaxYaw = 40,         -- deg, either way
+	torsoMaxLeanForward = 20, -- deg
+	torsoMaxLeanBack = 15,    -- deg
+	torsoMaxRoll = 10,        -- deg of side lean
+	torsoStiffness = 30,      -- LOWER = heavier, slower body
+	torsoDamping = 8,
+	torsoMaxSpeed = 300,      -- deg/s
+	torsoThrowStiffness = 110, -- the whip needs a much faster body, or it's a lazy turn
+	torsoWindupYaw = -30,     -- arm cocked behind the head: right shoulder pulled back...
+	torsoWindupLean = 10,     -- ...and leaning back
+	torsoWhipYaw = 25,        -- the snap: shoulders come round the other way...
+	torsoWhipLean = -14,      -- ...leaning forward into it
+	torsoReachLean = -7,      -- leaning into an empty-handed reach
+	torsoCarryRoll = 4,       -- leaning away from the weight in the right hand
+	torsoEatLean = -10,       -- hunching into the bite
+	torsoChewJolt = 0.4,      -- how much of each chew crunch the whole body takes
 }
 
 -- Studs/s of slack over walkSpeed before it counts as too fast. Covers the small
@@ -788,9 +809,47 @@ function System.onAdded(rig: Model, config)
 			baseC0 = shoulder.C0
 		end
 
+		--[[
+			THE TORSO LAYER'S JOINTS. The root joint turns the torso; the hips are
+			counter-turned by exactly the same amount so the legs stay planted and
+			only the upper body moves. Bases from the server's attributes where
+			there are any, same reason as the shoulder above. Missing any of them =
+			no torso layer for this rig, and the arm works exactly as before.
+		--]]
+		local torsoRig = nil
+		local rootPart = rig:FindFirstChild("HumanoidRootPart")
+		local rootJoint = rootPart and rootPart:FindFirstChild("RootJoint")
+		local leftHip = torso:FindFirstChild("Left Hip")
+		local rightHip = torso:FindFirstChild("Right Hip")
+		if cfg.torsoLayer
+			and rootJoint and rootJoint:IsA("Motor6D")
+			and leftHip and leftHip:IsA("Motor6D")
+			and rightHip and rightHip:IsA("Motor6D") then
+			local function base(joint: Motor6D, attr: string): CFrame
+				local v = rig:GetAttribute(attr)
+				return typeof(v) == "CFrame" and v or joint.C0
+			end
+			torsoRig = {
+				rootJoint = rootJoint,
+				rootBase = base(rootJoint, "RootJointBaseC0"),
+				leftHip = leftHip,
+				leftBase = base(leftHip, "LeftHipBaseC0"),
+				rightHip = rightHip,
+				rightBase = base(rightHip, "RightHipBaseC0"),
+				-- Pivot at the WAIST (bottom of the torso), so it bends there
+				-- instead of the hips sliding about under a torso spinning on its
+				-- middle.
+				waist = torso.Size.Y / 2,
+				yaw = 0, yawVel = 0,
+				lean = 0, leanVel = 0,
+				roll = 0, rollVel = 0,
+			}
+		end
+
 		rigs[rig] = {
 			rig = rig, torso = torso, shoulder = shoulder, arm = arm,
 			humanoid = humanoid, cfg = cfg,
+			torsoRig = torsoRig,
 			basePos = baseC0.Position,
 			baseRot = baseC0 - baseC0.Position,
 			rise = 0, riseVel = 0,
@@ -812,6 +871,19 @@ function System.onRemoved(rig: Model)
 		pcall(function()
 			state.shoulder.C0 = CFrame.new(state.basePos) * state.baseRot
 		end)
+		local t = state.torsoRig
+		if t then
+			pcall(function()
+				t.leftHip.C0 = t.leftBase
+				t.rightHip.C0 = t.rightBase
+				rig:SetAttribute("TorsoLayer", nil)
+				-- On the creature's own screen CreatureMovement owns the root joint
+				-- and simply stops adding the layer; everywhere else it's ours.
+				if rig ~= player.Character then
+					t.rootJoint.C0 = t.rootBase
+				end
+			end)
+		end
 	end
 	local wasLocal = state and (rig == player.Character or player.Character == nil or not rig.Parent)
 	rigs[rig] = nil
@@ -1215,6 +1287,94 @@ function System.update(dt: number)
 			* CFrame.Angles(0, finalYaw, 0)
 			* CFrame.Angles(finalRise, 0, rollOffset)
 			* state.baseRot
+
+		--[[
+			---- TORSO ----
+			The upper body moving with the arm, so a reach or a throw is done with
+			the whole body instead of one limb swinging off a statue.
+
+			Everything here is read from the ARM'S OWN STATE (its angles, the throw
+			clock, the eat charge), all of which every client already has. So every
+			client works out the same torso without anything new on the wire.
+
+			  * the shoulders turn part of the way with the arm's swing
+			  * arm cocked back behind the head (charging a throw): right shoulder
+			    pulled back, leaning back -- the more it's loaded, the more
+			  * the whip: shoulders snap round the other way, leaning into it
+			  * an empty-handed reach leans forward; carrying leans away from the
+			    weight; the bite hunches into it and each chew jolts the body
+
+			Written as a twist about the WAIST, onto the root joint, with the hips
+			turned back by exactly the same amount -- so the legs stay planted and
+			keep walking while only the upper body moves. The head and arm already
+			aim relative to the torso, so they compensate on their own.
+		--]]
+		local t = state.torsoRig
+		if t and t.rootJoint.Parent and t.leftHip.Parent and t.rightHip.Parent then
+			-- 0..1: how far the arm is cocked back behind the head. Past 150
+			-- degrees of rise is only ever the throw wind-up.
+			local cock = math.clamp((math.deg(state.rise) - 150) / 50, 0, 1)
+
+			-- 0..1: the whip and its follow-through, off the same throw clock the
+			-- arm uses.
+			local whip = 0
+			if throwActive and throwT >= throwWindup then
+				local after = throwT - throwWindup
+				if after < cfg.throwWhipTime then
+					whip = after / math.max(cfg.throwWhipTime, 0.01)
+				else
+					local p = math.clamp((after - cfg.throwWhipTime) / math.max(cfg.throwFollowTime, 0.01), 0, 1)
+					whip = 1 - p * p * (3 - 2 * p)
+				end
+			end
+			local load = cock * (1 - whip)
+
+			local yawTarget = math.deg(state.yaw) * cfg.torsoFollowYaw
+				+ cfg.torsoWindupYaw * load
+				+ cfg.torsoWhipYaw * whip
+			local leanTarget = cfg.torsoWindupLean * load
+				+ cfg.torsoWhipLean * whip
+				+ cfg.torsoEatLean * math.clamp(state.eatCharge, 0, 1)
+				+ math.deg(state.chewRise) * cfg.torsoChewJolt
+			if not holding then
+				leanTarget += cfg.torsoReachLean * math.clamp(state.extend, 0, 1)
+			end
+			local rollTarget = holding and cfg.torsoCarryRoll or 0
+
+			yawTarget = math.clamp(yawTarget, -cfg.torsoMaxYaw, cfg.torsoMaxYaw)
+			leanTarget = math.clamp(leanTarget, -cfg.torsoMaxLeanForward, cfg.torsoMaxLeanBack)
+			rollTarget = math.clamp(rollTarget, -cfg.torsoMaxRoll, cfg.torsoMaxRoll)
+
+			-- Stiffer during a throw so the body keeps up with the whip; damping
+			-- scaled with it so the extra stiffness doesn't turn into a wobble.
+			local k = throwActive and cfg.torsoThrowStiffness or cfg.torsoStiffness
+			local c = cfg.torsoDamping * math.sqrt(k / math.max(cfg.torsoStiffness, 1))
+			local torsoMaxVel = cfg.torsoMaxSpeed
+			t.yaw, t.yawVel = springStep(t.yaw, t.yawVel, yawTarget, k, c, torsoMaxVel, dt)
+			t.lean, t.leanVel = springStep(t.lean, t.leanVel, leanTarget, k, c, torsoMaxVel, dt)
+			t.roll, t.rollVel = springStep(t.roll, t.rollVel, rollTarget, k, c, torsoMaxVel, dt)
+
+			-- The move in the torso's own space, pivoting at the waist.
+			local bend = CFrame.new(0, -t.waist, 0)
+				* CFrame.Angles(math.rad(t.lean), math.rad(t.yaw), math.rad(t.roll))
+				* CFrame.new(0, t.waist, 0)
+
+			-- The same move expressed on the root joint, and its exact opposite on
+			-- the hips so the legs end up precisely where they were.
+			local c1 = t.rootJoint.C1
+			local layer = c1:Inverse() * bend * c1
+			local unbend = bend:Inverse()
+			t.leftHip.C0 = unbend * t.leftBase
+			t.rightHip.C0 = unbend * t.rightBase
+
+			if isLocal then
+				-- CreatureMovement owns this joint on the creature's own screen
+				-- (lean, terrain tilt) and adds the layer on top of its own.
+				rig:SetAttribute("TorsoLayer", layer)
+			else
+				t.rootJoint.C0 = t.rootBase * layer
+			end
+		end
 
 		-- ---- publish ----
 		if isLocal and aimRemote then

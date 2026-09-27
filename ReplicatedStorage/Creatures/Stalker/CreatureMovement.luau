@@ -482,10 +482,19 @@ local function ComputeTerrainTilt(): CFrame
 	return c0Ref:Inverse() * align * c0Ref
 end
 
+--[[
+	TWO LAYERS ON ONE JOINT.
+
+	RootJoint.C0 carries this script's lean + terrain tilt AND the Arm system's
+	torso layer (the twist and lean that goes with reaching, throwing, eating --
+	published on this character as the TorsoLayer attribute). So the tilt is kept
+	in its own variable rather than read back off C0 each frame: reading it back
+	would fold the torso layer into the tilt and smooth it away.
+--]]
+local currentTilt = CFrame.identity
+
 local function UpdateTilt(deltaTime: number)
 	if humanoid.Health <= 0 then return end
-
-	local currentTilt = c0Ref:Inverse() * rootJoint.C0
 
 	local leanTarget = CFrame.identity
 	if leanEnabled then
@@ -503,8 +512,13 @@ local function UpdateTilt(deltaTime: number)
 	end
 
 	local target = terrainTarget * leanTarget
-	local tilt = currentTilt:Lerp(target, 0.2 ^ (1 / (deltaTime * 60)))
-	rootJoint.C0 = c0Ref * tilt
+	currentTilt = currentTilt:Lerp(target, 0.2 ^ (1 / (deltaTime * 60)))
+
+	local torsoLayer = character:GetAttribute("TorsoLayer")
+	if typeof(torsoLayer) ~= "CFrame" then
+		torsoLayer = CFrame.identity
+	end
+	rootJoint.C0 = c0Ref * currentTilt * torsoLayer
 end
 
 -- =====================
