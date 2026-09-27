@@ -27,7 +27,7 @@
 ]]
 
 local TEXTURES = {
-	curtain = "rbxassetid://0", -- aurora_curtain.png  (re-upload: the new continuous-sheet version)
+	curtain = "rbxassetid://77412774845819", -- aurora_curtain.png (continuous-sheet version)
 	glow    = "rbxassetid://131041612949925", -- aurora_glow.png (only used if GLOW.enabled)
 }
 
