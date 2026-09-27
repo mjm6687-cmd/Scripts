@@ -120,6 +120,18 @@ local DEFAULTS = {
 	torsoCarryRoll = 4,       -- leaning away from the weight in the right hand
 	torsoEatLean = -10,       -- hunching into the bite
 	torsoChewJolt = 0.4,      -- how much of each chew crunch the whole body takes
+
+	-- LEFT HAND WHILE EATING: it comes in and grabs the victim's body too, so both
+	-- hands push them into the mouth. Cosmetic. See the LEFT ARM section.
+	leftArmEat = true,        -- false = the left arm stays out of it
+	leftArmStiffness = 35,    -- LOWER = heavier, slower arm
+	leftArmDamping = 9,
+	leftArmMaxSpeed = 360,    -- deg/s
+	leftArmGripUp = 0.4,      -- studs above the victim's torso centre the hand aims: the chest
+	leftArmMaxYawAcross = 55, -- deg across the chest. Wider than the right arm's
+	                          -- limit: the victim is held in the MIDDLE, and this
+	                          -- hand has to reach them. Lower it if it clips.
+	leftArmChewJolt = 1,      -- share of each chew crunch the left arm takes
 }
 
 -- Studs/s of slack over walkSpeed before it counts as too fast. Covers the small
@@ -408,17 +420,21 @@ local function computeThrow(state, lookDir: Vector3, charge: number?): (Vector3?
 	return origin, launch * speed
 end
 
--- The body in the hand, found through the hold the server made, so the arc's
--- raycasts don't hit the very person being thrown. The hold is an AlignPosition
--- on the arm whose Attachment0 sits on the held part.
+-- The body in the hand, found through the hold the server made: for the arc's
+-- raycasts (so they don't hit the very person being thrown) and for the left
+-- hand to grab while eating. The hold is an AlignPosition on the arm whose
+-- Attachment0 sits on the held part; CreatureCorpseWeld is the body kept in the
+-- hand after a kill.
 local function heldVictim(state): Model?
-	local hold = state.arm:FindFirstChild("CreatureGrabWeld")
-	local grip = hold and hold:IsA("AlignPosition") and hold.Attachment0
-	local part = grip and grip.Parent
-	if not part then
-		return nil
+	for _, name in ipairs({ "CreatureGrabWeld", "CreatureCorpseWeld" }) do
+		local hold = state.arm:FindFirstChild(name)
+		local grip = hold and hold:IsA("AlignPosition") and hold.Attachment0
+		local part = grip and grip.Parent
+		if part then
+			return part.Parent :: any
+		end
 	end
-	return part.Parent :: any
+	return nil
 end
 
 -- Drawn locally, parented to the camera, so only the thrower ever sees it.
@@ -809,6 +825,24 @@ function System.onAdded(rig: Model, config)
 			baseC0 = shoulder.C0
 		end
 
+		-- The LEFT shoulder, for the two-handed eat. Optional: without one the
+		-- eat is one-handed, exactly as before.
+		local leftArmRig = nil
+		local leftShoulder = torso:FindFirstChild("Left Shoulder")
+		if cfg.leftArmEat and leftShoulder and leftShoulder:IsA("Motor6D") then
+			local leftBase = rig:GetAttribute("LeftShoulderBaseC0")
+			if typeof(leftBase) ~= "CFrame" then
+				leftBase = leftShoulder.C0
+			end
+			leftArmRig = {
+				shoulder = leftShoulder,
+				basePos = leftBase.Position,
+				baseRot = leftBase - leftBase.Position,
+				rise = 0, riseVel = 0,
+				yaw = 0, yawVel = 0,
+			}
+		end
+
 		--[[
 			THE TORSO LAYER'S JOINTS. The root joint turns the torso; the hips are
 			counter-turned by exactly the same amount so the legs stay planted and
@@ -850,6 +884,7 @@ function System.onAdded(rig: Model, config)
 			rig = rig, torso = torso, shoulder = shoulder, arm = arm,
 			humanoid = humanoid, cfg = cfg,
 			torsoRig = torsoRig,
+			leftArmRig = leftArmRig,
 			basePos = baseC0.Position,
 			baseRot = baseC0 - baseC0.Position,
 			rise = 0, riseVel = 0,
@@ -871,6 +906,12 @@ function System.onRemoved(rig: Model)
 		pcall(function()
 			state.shoulder.C0 = CFrame.new(state.basePos) * state.baseRot
 		end)
+		local la = state.leftArmRig
+		if la then
+			pcall(function()
+				la.shoulder.C0 = CFrame.new(la.basePos) * la.baseRot
+			end)
+		end
 		local t = state.torsoRig
 		if t then
 			pcall(function()
@@ -1287,6 +1328,68 @@ function System.update(dt: number)
 			* CFrame.Angles(0, finalYaw, 0)
 			* CFrame.Angles(finalRise, 0, rollOffset)
 			* state.baseRot
+
+		--[[
+			---- LEFT ARM ----
+			While eating, the left hand comes in and takes hold of the victim's
+			body as well, so both hands are pushing them into the mouth.
+
+			Driven by the eat charge, which every client already has (the local one
+			works it out, everyone else reads EatCharge), so everyone sees it. The
+			further the victim has been lifted toward the mouth, the further in the
+			hand comes; let go and it eases back out.
+
+			It aims at the victim's actual torso, found through the hold on the
+			right arm, so it follows however they're hanging -- the corpse kept in
+			the hand after the kill included. Same aiming maths as the right arm,
+			mirrored limits: for the LEFT arm, positive yaw is outward.
+		--]]
+		local la = state.leftArmRig
+		if la and la.shoulder.Parent then
+			local charge = math.clamp(state.eatCharge, 0, 1)
+			local targetLRise, targetLYaw = 0, 0
+
+			if charge > 0 then
+				local shoulderWorld = state.torso.CFrame * la.basePos
+				local victim = heldVictim(state)
+				local body = victim and (victim:FindFirstChild("Torso")
+					or victim:FindFirstChild("UpperTorso")
+					or victim:FindFirstChild("HumanoidRootPart"))
+
+				local goal
+				if body and body:IsA("BasePart") then
+					goal = body.Position + Vector3.new(0, cfg.leftArmGripUp, 0)
+				else
+					-- No body to find (it's between hands at the kill): a point just
+					-- below and in front of the mouth, where the body would be.
+					goal = mouthWorldPos(state) + state.torso.CFrame:VectorToWorldSpace(Vector3.new(0, -1.3, -1.2))
+				end
+
+				local d = state.torso.CFrame:VectorToObjectSpace(goal - shoulderWorld)
+				if d.Magnitude > 0.01 then
+					d = d.Unit
+					local rise = math.clamp(math.acos(math.clamp(-d.Y, -1, 1)),
+						math.rad(cfg.armMinRise), math.rad(cfg.armMaxRise))
+					local yaw = math.clamp(math.atan2(-d.X, -d.Z),
+						-math.rad(cfg.leftArmMaxYawAcross), math.rad(cfg.armMaxYawOutward))
+					targetLRise = rise * charge
+					targetLYaw = yaw * charge
+				end
+			end
+
+			local lMaxVel = math.rad(cfg.leftArmMaxSpeed)
+			la.rise, la.riseVel = springStep(la.rise, la.riseVel, targetLRise,
+				cfg.leftArmStiffness, cfg.leftArmDamping, lMaxVel, dt)
+			la.yaw, la.yawVel = springStepAngle(la.yaw, la.yawVel, targetLYaw,
+				cfg.leftArmStiffness, cfg.leftArmDamping, lMaxVel, dt)
+
+			-- The chew crunches jolt this arm too, roll mirrored for the other side.
+			local jolt = cfg.leftArmChewJolt
+			la.shoulder.C0 = CFrame.new(la.basePos)
+				* CFrame.Angles(0, la.yaw + state.chewYaw * jolt, 0)
+				* CFrame.Angles(la.rise + state.chewRise * jolt, 0, -state.chewRoll * jolt)
+				* la.baseRot
+		end
 
 		--[[
 			---- TORSO ----

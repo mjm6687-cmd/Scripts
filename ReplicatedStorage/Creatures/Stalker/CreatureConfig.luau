@@ -444,6 +444,20 @@ return {
 	throwWhipYaw = 12,        -- deg. Slightly across the body
 
 	-- =====================
+	-- LEFT HAND WHILE EATING  (read by Systems > Arm)
+	-- =====================
+	-- As the victim is lifted to the mouth, the left hand comes in and grabs their
+	-- body too, so both hands push them in; the chew crunches jolt both arms.
+	-- Cosmetic, and everyone sees it.
+	leftArmEat = true,        -- false = the eat stays one-handed
+	leftArmStiffness = 35,    -- LOWER = heavier, slower arm
+	leftArmDamping = 9,
+	leftArmMaxSpeed = 360,    -- deg/s
+	leftArmGripUp = 0.4,      -- studs above the victim's torso centre the hand aims (the chest)
+	leftArmMaxYawAcross = 55, -- deg the left arm may swing across the chest. Lower if it clips
+	leftArmChewJolt = 1,      -- share of each chew crunch the left arm takes
+
+	-- =====================
 	-- TORSO LAYER  (read by Systems > Arm)
 	-- =====================
 	-- The upper body moves with the arm: it twists and leans back as a throw

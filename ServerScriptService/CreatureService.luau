@@ -239,6 +239,12 @@ function CreatureService.Morph(player: Player, creatureName: string)
 			rig:SetAttribute("RightShoulderBaseC0", shoulder.C0)
 		end
 
+		-- The left one too, for the two-handed eat.
+		local leftShoulder = rigTorso:FindFirstChild("Left Shoulder")
+		if leftShoulder and leftShoulder:IsA("Motor6D") then
+			rig:SetAttribute("LeftShoulderBaseC0", leftShoulder.C0)
+		end
+
 		-- The hips, for the Arm system's torso layer: it counter-rotates them so
 		-- the legs stay planted while the upper body twists.
 		for _, hipName in ipairs({ "Left Hip", "Right Hip" }) do
