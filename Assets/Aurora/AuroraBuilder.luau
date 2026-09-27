@@ -48,8 +48,8 @@ local MAIN_ARCS = {
 	bend = 1.2,               -- average turn, degrees per segment (gentle)
 	wiggle = 2.5,             -- how much the turning varies along it
 	folds = 3,                -- sharp folds along it
-	sheets = 4,
-	brightness = 2.2,
+	sheets = 2,               -- thin sheets side by side (a number, or a NumberRange to pick from)
+	brightness = 1.4,
 }
 
 --[[
@@ -65,8 +65,8 @@ local BANDS = {
 	wiggle = 9,
 	curlChance = 0.4,         -- chance a band tightens into a hook / spiral at its end
 	folds = 2,
-	sheets = 3,
-	brightness = NumberRange.new(1.1, 1.8),
+	sheets = NumberRange.new(1, 2), -- each band gets 1 or 2
+	brightness = NumberRange.new(0.8, 1.3),
 }
 
 local SEGMENT_STUDS = 300   -- length of each beam (shorter = smoother curves, more beams)
@@ -314,7 +314,8 @@ local function buildCurtain(name: string, start: Vector3, heading: number, spec)
 		points[i] += UP * (height * 0.07 * math.sin(i * 0.37 + altitude))
 	end
 
-	for s = 1, math.clamp(spec.sheets or 1, 1, #SHEETS) do
+	local sheetCount = math.clamp(math.floor(pick(spec.sheets or 1) + 0.5), 1, #SHEETS)
+	for s = 1, sheetCount do
 		local def = SHEETS[s]
 		local sheetPoints, sheetHeights = {}, {}
 		for i, p in ipairs(points) do
