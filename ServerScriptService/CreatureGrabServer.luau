@@ -10,11 +10,12 @@
 -- Nothing the client sends names a victim ? the server picks it. A modified client
 -- can spam requests and still only ever grab someone who is genuinely in reach.
 --
--- THE WELD IS THE TRICK
---   The victim's HumanoidRootPart is welded to the creature's Right Arm. From then
---   on the victim FOLLOWS THE ARM ? including through the Eat animation. That's why
---   eating is authored as an animation and needs no separate code to move the
---   victim to the mouth: animate the arm and the body in its grip comes along.
+-- THE HOLD IS THE TRICK
+--   The victim is pinned to the creature's Right Arm (a one-way AlignPosition +
+--   AlignOrientation, see attachToHand -- it used to be a Weld). From then on the
+--   victim FOLLOWS THE ARM, including through the eat. That's why nothing moves
+--   the victim to the mouth separately: move the arm and the body in its grip
+--   comes along. One-way, so the body can never push the creature around.
 --
 -- Both RemoteEvents are created here at runtime, so there is nothing to add by hand.
 
@@ -182,8 +183,9 @@ local GRAB_HOLD_OFFSET = CFrame.new(GRAB_HOLD_POSITION) * GRAB_HOLD_ROTATION
 	CORPSE_HOLD_TIME, then the arm swings out and tosses it aside -- a lob, not a
 	throw. Kill to landing is about two seconds.
 
-	Held the same way a living victim is: welded to the Right Arm, weightless,
-	non-colliding, and simulated by the creature's own computer, so it sits in the
+	Held the same way a living victim is: pinned to the Right Arm by the one-way
+	hold (attachToHand), weightless, non-colliding, and simulated by the
+	creature's own computer, so it sits in the
 	hand the creature's player actually sees (the arm pose is client-side). The
 	head is already gone by then, so the hand closes on the neck stump.
 
@@ -488,6 +490,67 @@ local function restoreCollisions(grab)
 end
 
 --[[
+	HOLDING WITHOUT WEIGHT: A ONE-WAY PULL, NOT A WELD.
+
+	A Weld makes the held body PART OF THE CREATURE. Every swing of a ragdolled
+	limb, every leg dragging on the ground, every joint limit snapping back is then
+	a force on the creature itself -- that's what made movement feel wrong while
+	carrying someone, however light the body was made.
+
+	AlignPosition + AlignOrientation with their reaction forces OFF pull the body
+	to the hand and push nothing back. The body follows the arm exactly as it did
+	(Rigidity on, so it doesn't lag or spring), but it's its own assembly: the
+	creature can't feel it at all.
+
+	Same maths as the weld it replaces: the grip point on the body is put on the
+	hand point on the arm, i.e. arm.CFrame * c0 == part.CFrame * c1.
+
+	The AlignPosition is named `name` and parented to the ARM, so anything that
+	used to look for the weld there (the Arm system, the throw launch) still finds
+	it; its Attachment0 sits on the held part.
+--]]
+local function attachToHand(arm: BasePart, part: BasePart, c0: CFrame, c1: CFrame, name: string)
+	local hand = Instance.new("Attachment")
+	hand.Name = name .. "Hand"
+	hand.CFrame = c0
+	hand.Parent = arm
+
+	local grip = Instance.new("Attachment")
+	grip.Name = name .. "Grip"
+	grip.CFrame = c1
+	grip.Parent = part
+
+	local pos = Instance.new("AlignPosition")
+	pos.Name = name
+	pos.Attachment0 = grip
+	pos.Attachment1 = hand
+	pos.RigidityEnabled = true
+	pos.ReactionForceEnabled = false -- THE point: nothing pushes back on the creature
+	pos.Parent = arm
+
+	local rot = Instance.new("AlignOrientation")
+	rot.Name = name .. "Rot"
+	rot.Attachment0 = grip
+	rot.Attachment1 = hand
+	rot.RigidityEnabled = true
+	rot.ReactionTorqueEnabled = false
+	rot.Parent = arm
+
+	return { pos = pos, rot = rot, hand = hand, grip = grip }
+end
+
+local function detachFromHand(holder)
+	if not holder then
+		return
+	end
+	for _, inst in ipairs({ holder.pos, holder.rot, holder.hand, holder.grip }) do
+		if inst then
+			inst:Destroy()
+		end
+	end
+end
+
+--[[
 	`thrown` = the victim is leaving the hand through the air rather than being
 	put down. They stay ragdolled, keep no collision for a moment (so they don't
 	clip the creature on the way out), and don't get up until the throw code says
@@ -500,9 +563,7 @@ local function releaseVictim(rig: Model, killed: boolean, thrown: boolean?)
 	end
 	grabs[rig] = nil
 
-	if grab.weld then
-		grab.weld:Destroy()
-	end
+	detachFromHand(grab.weld)
 
 	-- Stopped whichever way the grab ends. A dropped survivor walking away still
 	-- limp in the carry pose is as wrong as a corpse would be.
@@ -864,23 +925,15 @@ local function doGrab(player: Player?, rig: Model)
 		heldPart = vroot
 	end
 
-	local weld = Instance.new("Weld")
-	weld.Name = "CreatureGrabWeld"
-	weld.Part0 = arm
-	weld.Part1 = heldPart
-
-	weld.C0 = gripC0(arm)
-
 	-- C1 = where on the held part the hand closes. For a limb that's near its top
 	-- end; for the root fallback it's the old offset up the torso, which put the
 	-- hand at shoulder height rather than glued to their middle.
-	if heldPart == vroot then
-		weld.C1 = CFrame.new(0, GRAB_VICTIM_GRIP_HEIGHT, 0)
-	else
-		weld.C1 = CFrame.new(GRAB_LIMB_GRIP)
-	end
+	local c1 = (heldPart == vroot)
+		and CFrame.new(0, GRAB_VICTIM_GRIP_HEIGHT, 0)
+		or CFrame.new(GRAB_LIMB_GRIP)
 
-	weld.Parent = arm
+	-- One-way hold: follows the hand, never pushes the creature. See attachToHand.
+	local weld = attachToHand(arm, heldPart, gripC0(arm), c1, "CreatureGrabWeld")
 
 	grabs[rig] = {
 		victim = victim,
@@ -1097,9 +1150,7 @@ local function releaseCorpse(rig: Model, tossed: boolean)
 	end
 	heldCorpses[rig] = nil
 
-	if rec.weld then
-		rec.weld:Destroy()
-	end
+	detachFromHand(rec.weld)
 	if rig.Parent then
 		rig:SetAttribute("CreatureHoldingCorpse", nil)
 	end
@@ -1242,14 +1293,7 @@ local function holdCorpse(rig: Model, owner: Player?, corpse: Model): boolean
 		end
 	end
 
-	local weld = Instance.new("Weld")
-	weld.Name = "CreatureCorpseWeld"
-	weld.Part0 = arm
-	weld.Part1 = torso
-	weld.C0 = gripC0(arm)
-	weld.C1 = CFrame.new(CORPSE_GRIP)
-	weld.Parent = arm
-	rec.weld = weld
+	rec.weld = attachToHand(arm, torso, gripC0(arm), CFrame.new(CORPSE_GRIP), "CreatureCorpseWeld")
 
 	-- The creature's computer runs the body, same as the carry, so it sits in the
 	-- hand that player sees and replicates to everyone from there.

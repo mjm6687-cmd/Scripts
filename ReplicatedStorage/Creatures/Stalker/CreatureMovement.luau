@@ -209,6 +209,53 @@ TERRAIN.rayParams.FilterType = Enum.RaycastFilterType.Exclude
 TERRAIN.rayParams.FilterDescendantsInstances = { character }
 TERRAIN.rayParams.IgnoreWater = true
 
+--[[
+	WHATEVER IS IN THE HAND ISN'T GROUND.
+
+	Both rays above point straight down from the root, and a body dangling from
+	the arm swings through exactly that space. Hitting it made the terrain tilt
+	lean the creature toward a limb and the slope check slow it down "uphill" on a
+	leg -- the creature wobbling and dragging while carrying. So the held body is
+	added to the filter for as long as it's held.
+
+	Found through the hold CreatureGrabServer puts on the Right Arm: an
+	AlignPosition whose Attachment0 sits on the held part (a living victim, or a
+	corpse after a kill).
+--]]
+local HOLD_NAMES = { "CreatureGrabWeld", "CreatureCorpseWeld" }
+local rightArm = character:FindFirstChild("Right Arm")
+local filteredBody: Model? = nil
+
+local function findHeldBody(): Model?
+	if not (rightArm and rightArm.Parent) then
+		rightArm = character:FindFirstChild("Right Arm")
+		if not rightArm then
+			return nil
+		end
+	end
+	for _, name in ipairs(HOLD_NAMES) do
+		local hold = rightArm:FindFirstChild(name)
+		local grip = hold and hold:IsA("AlignPosition") and hold.Attachment0
+		local model = grip and grip.Parent and grip.Parent:FindFirstAncestorOfClass("Model")
+		if model and model ~= character then
+			return model
+		end
+	end
+	return nil
+end
+
+-- Only rewrites the filters when what's held changes, not every frame.
+local function updateRayFilters()
+	local body = findHeldBody()
+	if body == filteredBody then
+		return
+	end
+	filteredBody = body
+	local list = body and { character, body } or { character }
+	TUNE.slopeRayParams.FilterDescendantsInstances = list
+	TERRAIN.rayParams.FilterDescendantsInstances = list
+end
+
 local maxTiltAngle = config.maxLeanAngle or 0.18
 
 -- runtime state
@@ -730,6 +777,7 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 
 	movementVector = humanoid.MoveDirection.Magnitude > 0 and humanoid.MoveDirection.Unit or Vector3.zero
 
+	updateRayFilters()
 	UpdateTilt(deltaTime)
 
 	-- ---- uphill slope angle along the current heading ----

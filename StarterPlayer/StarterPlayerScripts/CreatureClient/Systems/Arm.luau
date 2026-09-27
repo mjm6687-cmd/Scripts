@@ -373,11 +373,13 @@ local function computeThrow(state, lookDir: Vector3, charge: number?): (Vector3?
 	return origin, launch * speed
 end
 
--- The body in the hand, found through the weld the server made, so the arc's
--- raycasts don't hit the very person being thrown.
+-- The body in the hand, found through the hold the server made, so the arc's
+-- raycasts don't hit the very person being thrown. The hold is an AlignPosition
+-- on the arm whose Attachment0 sits on the held part.
 local function heldVictim(state): Model?
-	local weld = state.arm:FindFirstChild("CreatureGrabWeld")
-	local part = weld and weld:IsA("Weld") and weld.Part1
+	local hold = state.arm:FindFirstChild("CreatureGrabWeld")
+	local grip = hold and hold:IsA("AlignPosition") and hold.Attachment0
+	local part = grip and grip.Parent
 	if not part then
 		return nil
 	end
@@ -671,16 +673,19 @@ function System.init(ctx)
 				return
 			end
 
-			-- The grab weld is gone on the server; make sure it's gone here too
-			-- before moving anything, or the body is yanked back to the hand.
-			-- CreatureCorpseWeld is the one holding a body after a kill.
+			-- The hold is gone on the server; make sure it's gone here too before
+			-- moving anything, or the body is pulled straight back to the hand.
+			-- CreatureCorpseWeld is the one holding a body after a kill; each hold
+			-- is an AlignPosition plus an AlignOrientation named <name>Rot.
 			local char = player.Character
 			local arm = char and char:FindFirstChild("Right Arm")
 			if arm then
 				for _, name in ipairs({ "CreatureGrabWeld", "CreatureCorpseWeld" }) do
-					local weld = arm:FindFirstChild(name)
-					if weld then
-						weld:Destroy()
+					for _, piece in ipairs({ name, name .. "Rot" }) do
+						local hold = arm:FindFirstChild(piece)
+						if hold then
+							hold:Destroy()
+						end
 					end
 				end
 			end
