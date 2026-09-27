@@ -19,11 +19,17 @@
 	aurora spreads (studs across, default 10000). Move it while playing and the
 	aurora follows.
 
-	TESTING (set these on Lighting in the Properties window while playing):
-	  AuroraForce  (string)  "Quiet" / "Active" / "Storm" / "None": every roll
-	                         uses that kind of night and it is on all night.
-	                         Blank = random again.
-	  AuroraReroll (bool)    tick it to roll a new sky right now.
+	CONTROLLING IT (admin commands in EnvironmentCommands use these, or set the
+	Lighting attributes in the Properties window while playing):
+	  AuroraForce      (string) "Quiet" / "Active" / "Storm" / "Off": every roll
+	                            uses that kind of night and it is on all night.
+	                            Blank = Auto (random again).
+	  AuroraReroll     (bool)   tick it to roll a new sky right now.
+	  AuroraAutoSurges (bool)   false = no surges unless triggered by hand.
+	Or fire ServerStorage.AuroraControl (a BindableEvent this script makes):
+	  :Fire("quiet" | "active" | "storm" | "off" | "auto")   same as AuroraForce
+	  :Fire("reroll")                                         new sky, same mode
+	  :Fire("surge", power?, seconds?)                        a surge right now
 
 	Everything it publishes is an attribute on Lighting (they start with Aurora).
 ]]
@@ -71,12 +77,15 @@ end
 local function rollKind(): string
 	local forced = Lighting:GetAttribute("AuroraForce")
 	if type(forced) == "string" and forced ~= "" then
+		if forced:lower() == "off" then
+			return "None"
+		end
 		for _, c in ipairs(CHANCES) do
 			if c.kind:lower() == forced:lower() then
 				return c.kind
 			end
 		end
-		warn(("[Aurora] AuroraForce %q isn't None/Quiet/Active/Storm -- rolling randomly."):format(forced))
+		warn(("[Aurora] AuroraForce %q isn't Off/Quiet/Active/Storm -- rolling randomly."):format(forced))
 	end
 	local total = 0
 	for _, c in ipairs(CHANCES) do total += c.weight end
@@ -129,6 +138,17 @@ local function scheduleSurge(fromNow: number)
 	nextSurge = s and (os.clock() + fromNow) or math.huge
 end
 
+local function fireSurge(power: number?, length: number?)
+	local s = SURGES[kind] or SURGES.Active
+	length = length or pick(s.length)
+	Lighting:SetAttribute("AuroraBurstLength", length)
+	Lighting:SetAttribute("AuroraBurstPower", power or pick(s.power))
+	Lighting:SetAttribute("AuroraBurstStart", workspace:GetServerTimeNow())
+	if SURGES[kind] then
+		scheduleSurge(length + pick(SURGES[kind].every))
+	end
+end
+
 local function roll()
 	kind = rollKind()
 	local forced = (Lighting:GetAttribute("AuroraForce") or "") ~= ""
@@ -154,14 +174,51 @@ if Lighting:GetAttribute("AuroraForce") == nil then
 	Lighting:SetAttribute("AuroraForce", "")
 end
 Lighting:SetAttribute("AuroraReroll", false)
+if Lighting:GetAttribute("AuroraAutoSurges") == nil then
+	Lighting:SetAttribute("AuroraAutoSurges", true)
+end
 
 Lighting:GetAttributeChangedSignal("AuroraReroll"):Connect(function()
 	if Lighting:GetAttribute("AuroraReroll") then
 		Lighting:SetAttribute("AuroraReroll", false)
+if Lighting:GetAttribute("AuroraAutoSurges") == nil then
+	Lighting:SetAttribute("AuroraAutoSurges", true)
+end
 		roll()
 	end
 end)
 Lighting:GetAttributeChangedSignal("AuroraForce"):Connect(roll)
+
+local ServerStorage = game:GetService("ServerStorage")
+local control = ServerStorage:FindFirstChild("AuroraControl")
+if not control then
+	control = Instance.new("BindableEvent")
+	control.Name = "AuroraControl"
+	control.Parent = ServerStorage
+end
+control.Event:Connect(function(command, a, b)
+	command = tostring(command):lower()
+	if command == "quiet" or command == "active" or command == "storm" or command == "off" then
+		local mode = command:sub(1, 1):upper() .. command:sub(2)
+		if Lighting:GetAttribute("AuroraForce") == mode then
+			roll() -- already in that mode: still give a fresh sky
+		else
+			Lighting:SetAttribute("AuroraForce", mode) -- rolls through the signal above
+		end
+	elseif command == "auto" then
+		if Lighting:GetAttribute("AuroraForce") == "" then
+			roll()
+		else
+			Lighting:SetAttribute("AuroraForce", "")
+		end
+	elseif command == "reroll" then
+		roll()
+	elseif command == "surge" then
+		fireSurge(tonumber(a), tonumber(b))
+	else
+		warn(("[Aurora] AuroraControl: unknown command %q"):format(command))
+	end
+end)
 
 roll()
 
@@ -183,12 +240,10 @@ while true do
 	if s and os.clock() >= nextSurge then
 		local onset = Lighting:GetAttribute("AuroraOnset") or 0
 		local ends = Lighting:GetAttribute("AuroraEnd") or 0
-		if h >= onset and h <= ends then
-			local length = pick(s.length)
-			Lighting:SetAttribute("AuroraBurstLength", length)
-			Lighting:SetAttribute("AuroraBurstPower", pick(s.power))
-			Lighting:SetAttribute("AuroraBurstStart", workspace:GetServerTimeNow())
-			scheduleSurge(length + pick(s.every))
+		if Lighting:GetAttribute("AuroraAutoSurges") == false then
+			scheduleSurge(10)
+		elseif h >= onset and h <= ends then
+			fireSurge()
 		else
 			scheduleSurge(10) -- not on yet; check again shortly
 		end

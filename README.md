@@ -99,7 +99,13 @@ Workspace
 Workspace. Its front face sets which way the main arcs run; an optional number
 attribute `Area` sets how far the aurora spreads (default 10000 studs). Every
 night gets a new random sky around it. For testing, set the Lighting attribute
-`AuroraForce` to `Quiet`/`Active`/`Storm`/`None`, or tick `AuroraReroll`.
+`AuroraForce` to `Quiet`/`Active`/`Storm`/`Off`, or tick `AuroraReroll` --
+or use the admin commands below.
+
+`KohlsAdmin/Config/Addons/EnvironmentCommands.luau` is a ModuleScript that goes
+in **Kohl's Admin > Config > Addons**: `;freezetime`, `;daylength`,
+`;nightlength`, `;season`, `;weather`, `;time`, `;aurora`, `;aurorasurge`,
+`;aurorasurges`.
 
 ## Assets
 
