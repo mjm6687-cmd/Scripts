@@ -76,7 +76,7 @@ config.canCrouch = true -- Can the player crouch
 config.canProne = true -- Can the player go prone (This setting doesn't matter if canCrouch is false)
 config.proneAngle = false -- Adjust prone angle based on ground
 
-config.jumpCooldown = 1.6 -- Time between jumps
+config.jumpCooldown = 1 -- Seconds after landing before you can jump again (read by CharacterMovement). Was 1.6 here, but nothing read it and the real cooldown was 1
 
 config.useHigherAnimPriority = true -- Uses higher animation priorities for the Crouch and Prone animations to avoid conflicting with the default tool idle animation.
 config.firstPersonAimAnim = false -- Should aim animations play in first person?

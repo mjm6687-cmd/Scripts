@@ -512,7 +512,9 @@ local function UpdateTilt(deltaTime: number)
 	end
 
 	local target = terrainTarget * leanTarget
-	currentTilt = currentTilt:Lerp(target, 0.2 ^ (1 / (deltaTime * 60)))
+	-- Frame-rate independent (20% per frame at 60fps, the same feel at any rate).
+	-- The old 0.2 ^ (1 / (dt * 60)) was ~6x slower at 144Hz.
+	currentTilt = currentTilt:Lerp(target, 1 - 0.8 ^ (deltaTime * 60))
 
 	local torsoLayer = character:GetAttribute("TorsoLayer")
 	if typeof(torsoLayer) ~= "CFrame" then

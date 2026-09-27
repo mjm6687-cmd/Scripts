@@ -134,7 +134,6 @@ local TURN_RATE_CROUCH  = 300
 local TURN_RATE_PRONE   = 200
 local TURN_RATE_AIR     = 160
 
-local TURN_SPEED_SCALE_POWER = 0.55
 local TURN_STOP_THRESHOLD = 0.8
 
 -- Idle-turn tuning grouped into one table (keeps the script under Luau's 200-local limit).
@@ -158,6 +157,48 @@ local TUNE = {
 	slopeWalkMinMult = 0.7,      -- walk-speed multiplier on the steepest climb
 	slopeSprintFullAngle = 15,   -- deg; full sprint at/below this
 	slopeSprintCutoffAngle = 35, -- deg; sprint fully gone at/above this (blends out between)
+
+	--[[
+		ACCELERATION CURVE. Speed used to ramp at one fixed rate the whole way, so you
+		hit top speed with a hard corner. Now it pushes hardest off the line and eases
+		into top speed: the accel rate is scaled from accelLaunch (at a standstill)
+		down to accelSettle (arriving at the target). Total ramp time stays close to
+		the old one; it's the SHAPE that changes.
+	--]]
+	accelLaunch = 1.6,   -- x accel rate when starting from nothing
+	accelSettle = 0.5,   -- x accel rate as you arrive at the target speed
+
+	--[[
+		BRAKING. decelSprint is kept for easing from a sprint down to a walk while
+		you're still holding a direction -- that wind-down is the weight. But
+		LETTING GO of every key brakes hard down to walk speed (the old 1.2s slide
+		from a sprint read as ice), and turning back on yourself brakes hardest.
+	--]]
+	stopBrake = 40,      -- studs/s^2 while above walk speed with no keys held
+	reverseBrake = 45,   -- studs/s^2 when steering back on yourself
+	reverseAngle = 120,  -- deg between where you're going and where you want to: counts as reversing
+
+	--[[
+		TURN BLEED. Speed used to carry through any turn at full value, so a sprinting
+		180 swung round at top speed like it was on skates. Now the target speed dips
+		with how sharp the change of direction is: nothing under turnBleedStartAngle,
+		down to turnBleedMin of it for a full about-face. It builds back as you come
+		round, through the normal acceleration.
+	--]]
+	turnBleedStartAngle = 45, -- deg; gentler changes of direction cost nothing
+	turnBleedMin = 0.4,       -- speed multiplier on a full 180
+
+	-- Turning is less nimble at speed: the third-person turn rate at full sprint is
+	-- this fraction of its walking value, blending in between walk and sprint speed.
+	sprintTurnScale = 0.65,
+
+	--[[
+		BLOCKED. WalkSpeed used to keep climbing while you pushed into a wall, so the
+		moment you slid off it you shot away at full sprint. When you're moving much
+		slower than your speed says you should be, it bleeds toward what you're
+		actually doing.
+	--]]
+	blockedBleed = 30,   -- studs/s^2
 }
 
 -- Reused downward ray for slope detection (set once; excludes the player)
@@ -482,28 +523,6 @@ end
 -- =====================
 -- TURN RADIUS HELPERS
 -- =====================
-local function slewDirection(current: Vector3, target: Vector3, maxDeg: number, dt: number): Vector3
-	if current.Magnitude < 0.001 then return target end
-	if target.Magnitude < 0.001 then return current end
-
-	local dot = math.clamp(current:Dot(target), -1, 1)
-	local angleBetween = math.deg(math.acos(dot))
-
-	local maxTurn = maxDeg * dt
-	if maxTurn >= angleBetween then return target end
-
-	local t = maxTurn / angleBetween
-	local cx, cz = current.X, current.Z
-	local tx, tz = target.X, target.Z
-	local aFrom = math.atan2(cz, cx)
-	local aTo   = math.atan2(tz, tx)
-	local delta = aTo - aFrom
-	if delta > math.pi  then delta -= 2 * math.pi end
-	if delta < -math.pi then delta += 2 * math.pi end
-	local aNew = aFrom + delta * t
-	return Vector3.new(math.cos(aNew), 0, math.sin(aNew))
-end
-
 local function getBaseTurnRate(): number
 	if IsAirborne() then return TURN_RATE_AIR end
 	if stance == 2 then return TURN_RATE_PRONE end
@@ -802,7 +821,9 @@ local lastTurnDetectedAt = 0
 -- JUMP WIND-UP & FALLING ANIMATIONS
 -- =====================
 local JUMP_WINDUP_DURATION = 0.45
-local JUMP_LANDING_COOLDOWN = 1
+-- Time after landing before you can jump again. Reads GameConfig.jumpCooldown,
+-- which used to exist without anything reading it.
+local JUMP_LANDING_COOLDOWN = config.jumpCooldown or 1
 local jumpWindingUp = false
 local jumpOnCooldown = false
 local lastLandedTime = -999
@@ -1161,7 +1182,10 @@ local function UpdateCharacterTilt(character, deltaTime)
 
 	local target = terrainTarget
 
-	local tilt = currentTilt:Lerp(target, 0.2 ^ (1 / (deltaTime * 60)))
+	-- Frame-rate independent: 20% of the way per frame at 60fps, the same feel at any
+	-- frame rate. The old 0.2 ^ (1 / (dt * 60)) only worked at exactly 60fps -- at
+	-- 144Hz it was about six times slower, and snappier on a slow machine.
+	local tilt = currentTilt:Lerp(target, 1 - 0.8 ^ (deltaTime * 60))
 	joint.C0 = c0Ref * tilt
 end
 
@@ -1931,6 +1955,20 @@ runService.RenderStepped:Connect(function(deltaTime)
 				targetWalkSpeed *= (1 - t * (1 - TUNE.slopeWalkMinMult))
 			end
 
+			-- 1b) Turn bleed: the sharper the change of direction, the lower the target
+			-- speed, so a hard about-face at a sprint slows you instead of skating round.
+			-- Measured between where you're ACTUALLY going and where you're asking to
+			-- go, so it works the same in third person and first person. See TUNE.
+			local flatVel = rootPart.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
+			local actualSpeed = flatVel.Magnitude
+			local turnAngle = 0
+			local wishDir = getRawMoveDir()
+			if wishDir.Magnitude > 0.001 and actualSpeed > 2 then
+				turnAngle = math.deg(math.acos(math.clamp(flatVel.Unit:Dot(wishDir), -1, 1)))
+				local bleed = math.clamp((turnAngle - TUNE.turnBleedStartAngle) / (180 - TUNE.turnBleedStartAngle), 0, 1)
+				targetWalkSpeed *= 1 - bleed * (1 - TUNE.turnBleedMin)
+			end
+
 			-- 2) Target is zero when there's no movement input, so momentum bleeds off via the
 			-- decel ramp (coast to a stop) instead of braking. Also zero while turning in place / blocked.
 			if inputMag == 0 or idlePivoting or jumpWindingUp or landingLocked then
@@ -1941,9 +1979,20 @@ runService.RenderStepped:Connect(function(deltaTime)
 			local accelRate, decelRate = getAccelDecel()
 			local rate
 			if targetWalkSpeed > smoothedSpeed then
-				rate = accelRate   -- speeding up
+				-- Speeding up, on a curve: hardest off the line, easing into the target.
+				local progress = math.clamp(smoothedSpeed / math.max(targetWalkSpeed, 0.01), 0, 1)
+				rate = accelRate * (TUNE.accelLaunch + (TUNE.accelSettle - TUNE.accelLaunch) * progress)
 			else
-				rate = decelRate   -- slowing down (including stopping)
+				-- Slowing down. Easing off a sprint while still moving keeps the slow
+				-- decel (the weight); letting go of every key brakes hard until you're
+				-- back to walking pace; steering back on yourself brakes hardest.
+				rate = decelRate
+				if inputMag == 0 and smoothedSpeed > script:GetAttribute("WalkSpeed") then
+					rate = math.max(rate, TUNE.stopBrake)
+				end
+				if turnAngle >= TUNE.reverseAngle then
+					rate = math.max(rate, TUNE.reverseBrake)
+				end
 			end
 
 			-- Landing lock: bleed speed off much faster so we don't float forward
@@ -1953,6 +2002,17 @@ runService.RenderStepped:Connect(function(deltaTime)
 
 			-- 4) Ramp smoothedSpeed toward target
 			smoothedSpeed = moveToward(smoothedSpeed, targetWalkSpeed, rate, deltaTime)
+
+			-- 4b) Blocked: moving far slower than our speed says (pushing into a wall,
+			-- wedged on something), so bleed toward what we're actually doing. Otherwise
+			-- the speed keeps building and you launch off the wall at full sprint.
+			if inputMag > 0 and not idlePivoting and not landingLocked
+				and humanoid.FloorMaterial ~= Enum.Material.Air then
+				local gap = smoothedSpeed - actualSpeed
+				if gap > math.max(3, smoothedSpeed * 0.4) then
+					smoothedSpeed = moveToward(smoothedSpeed, actualSpeed, TUNE.blockedBleed, deltaTime)
+				end
+			end
 
 			-- 5) Snap to zero if below threshold to prevent eternal micro-drift
 			if smoothedSpeed < SPEED_SNAP_THRESHOLD and targetWalkSpeed == 0 then
@@ -2117,6 +2177,13 @@ runService.RenderStepped:Connect(function(deltaTime)
 				-- Velocity cap: idle-pivot rate while turning in place, the normal per-state
 				-- turn rate (getBaseTurnRate) once moving. TUNE stiffness/damping give the bounce.
 				local cap = idlePivoting and getIdlePivotRate() or getBaseTurnRate()
+				-- Less nimble at speed: the turn rate scales down toward sprintTurnScale
+				-- between walk and full sprint speed, so a sprint turns in a wider arc.
+				if not idlePivoting then
+					local walkS = script:GetAttribute("WalkSpeed")
+					local over = math.clamp((smoothedSpeed - walkS) / math.max(script:GetAttribute("SprintSpeed") - walkS, 0.01), 0, 1)
+					cap *= 1 - over * (1 - TUNE.sprintTurnScale)
+				end
 				local force = diff * TUNE.idleStiffness - idleYawVel * TUNE.idleDamping
 				idleYawVel = math.clamp(idleYawVel + force * deltaTime, -cap, cap)
 				idleYaw += idleYawVel * deltaTime
