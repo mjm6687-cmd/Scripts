@@ -399,7 +399,13 @@ return {
 	throwChargeTime = 1.2,    -- seconds of holding right click to reach full charge
 	throwWindupMin = 0.07,    -- fully charged the arm is already back; this is all that's left
 	throwChargeShake = 1.5,   -- deg of tremble in the cocked arm at full charge
-	throwUpBias = 14,         -- deg added to your aim, so looking level still arcs
+	throwUpBias = 14,         -- deg added to your aim, so looking level still arcs.
+	-- This is the arc you START with: SCROLL while aiming to change it, down
+	-- for a flatter throw, up for a higher lob. It stays where you leave it.
+	throwArcMin = -10,        -- deg; the flattest you can scroll to
+	throwArcMax = 40,         -- deg; the highest lob
+	throwArcStep = 4,         -- deg per scroll notch
+	throwAimSpeedMultiplier = 0.45, -- walk speed while aiming (0.45 = 45%)
 	throwMinPitch = -20,      -- deg; lowest you can aim (stops spiking into the floor)
 	throwMaxPitch = 65,       -- deg; highest
 	throwOriginUp = 1.5,      -- where they launch from, relative to the root:

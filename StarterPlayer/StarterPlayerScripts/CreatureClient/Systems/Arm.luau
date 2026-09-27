@@ -74,7 +74,12 @@ local DEFAULTS = {
 	throwChargeTime = 1.2,  -- seconds of holding right click to reach full charge
 	throwWindupMin = 0.07,  -- fully charged, the arm is already back: just this long to finish
 	throwChargeShake = 1.5, -- deg of tremble in the cocked arm at full charge
-	throwUpBias = 14,
+	throwUpBias = 14,       -- the arc you start with, before any scrolling
+	-- SCROLL WHILE AIMING changes the arc: down = flatter, up = a higher lob.
+	-- Must match CreatureGrabServer's THROW_DEFAULTS; the server clamps to these.
+	throwArcMin = -10,      -- deg. The flattest you can scroll to
+	throwArcMax = 40,       -- deg. The highest lob
+	throwArcStep = 4,       -- deg per scroll notch
 	throwMinPitch = -20,
 	throwMaxPitch = 65,
 	throwOriginUp = 1.5,
@@ -125,6 +130,15 @@ local rightDown = false
 local rightDownAt = 0
 local threwThisPress = false
 local aimCharge = 0      -- 0..1, how long right click has been held past the aim delay
+
+-- Degrees added to the aim, set by scrolling while aiming. nil until the first
+-- scroll, which means "the creature's throwUpBias". Kept between throws on
+-- purpose: once you've found the arc you like, it stays.
+local aimArc: number? = nil
+
+local function currentArc(cfg): number
+	return aimArc or cfg.throwUpBias
+end
 
 -- ============================================================
 -- AIM FLAG
@@ -364,7 +378,7 @@ local function computeThrow(state, lookDir: Vector3, charge: number?): (Vector3?
 	end
 	flat = flat.Unit
 
-	local pitch = math.deg(math.asin(math.clamp(dir.Y, -1, 1))) + cfg.throwUpBias
+	local pitch = math.deg(math.asin(math.clamp(dir.Y, -1, 1))) + currentArc(cfg)
 	pitch = math.rad(math.clamp(pitch, cfg.throwMinPitch, cfg.throwMaxPitch))
 
 	local launch = flat * math.cos(pitch) + Vector3.yAxis * math.sin(pitch)
@@ -573,14 +587,16 @@ local function bindInput()
 			-- arm on THIS screen gets there, not a round trip later.
 			local stamp = workspace:GetServerTimeNow()
 			local charge = aimCharge
+			local st = rigs[char]
+			-- The arc goes with it, so the body flies along the line that was drawn.
+			local arc = currentArc(st and st.cfg or DEFAULTS)
 			local cam = workspace.CurrentCamera
 			if cam and actionRemote then
-				actionRemote:FireServer("Throw", cam.CFrame.LookVector, stamp, charge)
+				actionRemote:FireServer("Throw", cam.CFrame.LookVector, stamp, charge, arc)
 			end
 			threwThisPress = true
 			aimCharge = 0
 			hideArc()
-			local st = rigs[char]
 			if st then
 				st.localThrowStart = stamp
 				st.localThrowCharge = charge
@@ -643,6 +659,34 @@ local function bindInput()
 
 		return Enum.ContextActionResult.Pass
 	end, false, 2500, Enum.UserInputType.MouseButton2, Enum.KeyCode.ButtonL1)
+
+	--[[
+		SCROLL WHILE AIMING = THE ARC. Down flattens the throw, up lobs it higher,
+		and the drawn arc follows live. Only while right click is held with someone
+		in hand; any other time the wheel passes straight through to zooming, so
+		this never costs the normal camera anything.
+	--]]
+	ContextActionService:BindActionAtPriority("Creature_ThrowArc", function(_, inputState, input)
+		if inputState ~= Enum.UserInputState.Change then
+			return Enum.ContextActionResult.Pass
+		end
+		local char = player.Character
+		if not (char and CreatureUtil.IsCreature(char)) then
+			return Enum.ContextActionResult.Pass
+		end
+		if not rightDown or threwThisPress or char:GetAttribute("CreatureGrabbing") ~= true then
+			return Enum.ContextActionResult.Pass
+		end
+		local state = rigs[char]
+		if not state or input.Position.Z == 0 then
+			return Enum.ContextActionResult.Pass
+		end
+
+		local cfg = state.cfg
+		local step = (input.Position.Z > 0) and cfg.throwArcStep or -cfg.throwArcStep
+		aimArc = math.clamp(currentArc(cfg) + step, cfg.throwArcMin, cfg.throwArcMax)
+		return Enum.ContextActionResult.Sink
+	end, false, 2500, Enum.UserInputType.MouseWheel)
 end
 
 -- ============================================================

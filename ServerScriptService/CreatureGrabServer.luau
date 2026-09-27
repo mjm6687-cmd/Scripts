@@ -1794,6 +1794,11 @@ local THROW_DEFAULTS = {
 	throwAimDelay = 0.12,     -- the hold before charging starts (matches Arm)
 	throwWindupMin = 0.07,    -- wind-up left to do when fully charged
 	throwUpBias = 14,         -- deg added to your aim, so a level aim still arcs
+	-- The creature can scroll while aiming to change that between these (see
+	-- Arm). The number it sends is clamped here, so a modified client can't pick
+	-- an arc outside them.
+	throwArcMin = -10,
+	throwArcMax = 40,
 	throwMinPitch = -20,      -- deg; can't spike them straight into the floor
 	throwMaxPitch = 65,
 	throwOriginUp = 1.5,      -- launch point, relative to the creature's root
@@ -1842,7 +1847,7 @@ local function windupDuration(cfg, charge: number): number
 	return math.max(cfg.throwWindupMin, cfg.throwWindupTime * (1 - math.clamp(charge, 0, 1)))
 end
 
-local function throwVelocity(rig: Model, cfg, lookDir: Vector3, charge: number?): (Vector3?, Vector3?)
+local function throwVelocity(rig: Model, cfg, lookDir: Vector3, charge: number?, arc: number?): (Vector3?, Vector3?)
 	local root = rig:FindFirstChild("HumanoidRootPart")
 	if not (root and root:IsA("BasePart")) then
 		return nil, nil
@@ -1859,7 +1864,8 @@ local function throwVelocity(rig: Model, cfg, lookDir: Vector3, charge: number?)
 	end
 	flat = flat.Unit
 
-	local pitch = math.deg(math.asin(math.clamp(dir.Y, -1, 1))) + cfg.throwUpBias
+	-- `arc` is the creature's scrolled arc, already clamped by startThrow.
+	local pitch = math.deg(math.asin(math.clamp(dir.Y, -1, 1))) + (arc or cfg.throwUpBias)
 	pitch = math.rad(math.clamp(pitch, cfg.throwMinPitch, cfg.throwMaxPitch))
 
 	local launch = flat * math.cos(pitch) + Vector3.yAxis * math.sin(pitch)
@@ -1883,7 +1889,7 @@ local thrownBodies: { [Model]: any } = {}
 --]]
 local startThrow
 
-local function doThrow(player: Player?, rig: Model, lookDir: Vector3, charge: number?)
+local function doThrow(player: Player?, rig: Model, lookDir: Vector3, charge: number?, arc: number?)
 	local grab = grabs[rig]
 	if not grab then
 		return
@@ -1895,7 +1901,7 @@ local function doThrow(player: Player?, rig: Model, lookDir: Vector3, charge: nu
 	end
 
 	local cfg = throwConfigOf(rig)
-	local origin, velocity = throwVelocity(rig, cfg, lookDir, charge)
+	local origin, velocity = throwVelocity(rig, cfg, lookDir, charge, arc)
 	if not origin then
 		return
 	end
@@ -1990,7 +1996,7 @@ end
 --]]
 local MAX_THROW_LAG = 0.35
 
-startThrow = function(player: Player?, rig: Model, lookDir: Vector3, clientStamp: number?, clientCharge: number?)
+startThrow = function(player: Player?, rig: Model, lookDir: Vector3, clientStamp: number?, clientCharge: number?, clientArc: number?)
 	local grab = grabs[rig]
 	if not grab or grab.throwing then
 		return
@@ -2013,6 +2019,13 @@ startThrow = function(player: Player?, rig: Model, lookDir: Vector3, clientStamp
 		charge = math.clamp(clientCharge, 0, allowed)
 	end
 	grab.aimStartedAt = nil
+
+	-- THE ARC, CLAMPED. Whatever the client scrolled to, kept inside the range
+	-- this creature allows. Missing or nonsense = the creature's default arc.
+	local arc = cfg.throwUpBias
+	if typeof(clientArc) == "number" and clientArc == clientArc then
+		arc = math.clamp(clientArc, cfg.throwArcMin, cfg.throwArcMax)
+	end
 	-- Published so every other client knows how much wind-up is left to animate.
 	rig:SetAttribute("ThrowCharge", charge)
 
@@ -2031,7 +2044,7 @@ startThrow = function(player: Player?, rig: Model, lookDir: Vector3, clientStamp
 		-- or the creature may have died during the wind-up.
 		if grabs[rig] == grab and rig.Parent then
 			grab.throwing = false
-			doThrow(player, rig, lookDir, charge)
+			doThrow(player, rig, lookDir, charge, arc)
 		else
 			grab.throwing = false
 		end
@@ -2354,7 +2367,7 @@ end)
 -- ============================================================
 -- Called by the player remote below. `player` is only used by doGrab, to hand
 -- the victim's network ownership to the grabber.
-runAction = function(rig: Model, action: string, player: Player?, arg: any?, arg2: any?, arg3: any?)
+runAction = function(rig: Model, action: string, player: Player?, arg: any?, arg2: any?, arg3: any?, arg4: any?)
 	--[[
 		Mid-eat, only the escape hatches are allowed through.
 
@@ -2395,7 +2408,7 @@ runAction = function(rig: Model, action: string, player: Player?, arg: any?, arg
 		rig:SetAttribute("ChewStart", nil)
 	elseif action == "Throw" then
 		if typeof(arg) == "Vector3" then
-			startThrow(player, rig, arg, arg2, arg3)
+			startThrow(player, rig, arg, arg2, arg3, arg4)
 		end
 	elseif action == "Drop" then
 		-- false = they live. releaseVictim already puts back PlatformStand,
@@ -2439,7 +2452,7 @@ local function tooFastToUseArm(rig: Model): boolean
 	return speed > walkSpeedOf(rig) + SPRINT_LOCK_SLACK
 end
 
-actionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
+actionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3, arg4)
 	if typeof(action) ~= "string" then
 		return
 	end
@@ -2497,8 +2510,12 @@ actionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
 	if action ~= "Throw" or typeof(arg3) ~= "number" then
 		arg3 = nil
 	end
+	-- The scrolled arc. Range-checked in startThrow against this creature's limits.
+	if action ~= "Throw" or typeof(arg4) ~= "number" then
+		arg4 = nil
+	end
 
-	runAction(rig, action, player, arg, arg2, arg3)
+	runAction(rig, action, player, arg, arg2, arg3, arg4)
 end)
 
 -- ============================================================

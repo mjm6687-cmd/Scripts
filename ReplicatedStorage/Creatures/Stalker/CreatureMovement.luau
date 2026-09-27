@@ -169,6 +169,7 @@ local TUNE = {
 	decel = config.decelWalk or 26,
 	snap = config.speedSnapThreshold or 0.5,
 	strafeMult = config.strafeSpeedMultiplier or 0.85,
+	aimSpeedMult = config.throwAimSpeedMultiplier or 0.45,
 	slopeFull = config.slopeFullAngle or 12,
 	slopeSteep = config.slopeSteepAngle or 45,
 	slopeMin = config.slopeMinMult or 0.65,
@@ -838,6 +839,13 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 
 	if strafing then
 		targetSpeed *= TUNE.strafeMult
+	end
+
+	-- Aiming a throw (and through the wind-up and throw itself): slowed right
+	-- down. ThrowAiming is set by the Arm system on this same client. It goes
+	-- through the normal decel ramp, so you slow into the aim rather than stopping.
+	if character:GetAttribute("ThrowAiming") == true then
+		targetSpeed *= TUNE.aimSpeedMult
 	end
 
 	if climbAngle > TUNE.slopeFull then
