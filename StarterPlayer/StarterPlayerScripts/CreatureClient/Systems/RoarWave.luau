@@ -51,17 +51,17 @@ local System = {
 local WAVE_DEFAULTS = {
 	[1] = { -- R, broadcast: calling across the map. Big, slow, layered.
 		radius = 170, duration = 2.4, rings = 3, ringGap = 0.2, ringShrink = 0.8,
-		color = Color3.fromRGB(255, 130, 105), transparency = 0.35,
+		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
 		groundRing = true, groundRadius = 120,
 	},
 	[2] = { -- C, passive: close range, barely there. You have to be near it.
 		radius = 22, duration = 1.3, rings = 1, ringGap = 0, ringShrink = 1,
-		color = Color3.fromRGB(255, 170, 150), transparency = 0.65,
+		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
 		groundRing = false, groundRadius = 0,
 	},
-	[3] = { -- V, aggressive: aimed at someone. Fast, hard, red.
+	[3] = { -- V, aggressive: aimed at someone. Fast and hard.
 		radius = 65, duration = 0.95, rings = 2, ringGap = 0.09, ringShrink = 0.75,
-		color = Color3.fromRGB(255, 45, 30), transparency = 0.2,
+		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
 		groundRing = true, groundRadius = 45,
 	},
 }
@@ -239,8 +239,7 @@ local function playWave(rig: Model?, index: number, serverOrigin: Vector3)
 	local rings = math.max(1, math.floor(s.rings))
 	for i = 1, rings do
 		local radius = s.radius * (s.ringShrink ^ (i - 1))
-		-- Later shells are also a touch fainter, so the first one leads.
-		local transparency = math.clamp(s.transparency + (i - 1) * 0.12, 0, 1)
+		local transparency = math.clamp(s.transparency, 0, 1)
 		local delay = s.ringGap * (i - 1)
 		if delay <= 0 then
 			spawnShell(origin, radius, s.duration, s.color, transparency)
@@ -250,7 +249,7 @@ local function playWave(rig: Model?, index: number, serverOrigin: Vector3)
 	end
 
 	if s.groundRing and s.groundRadius > 0 then
-		spawnGroundRing(rig, origin, s.groundRadius, s.duration * 0.85, s.color, math.clamp(s.transparency + 0.15, 0, 1))
+		spawnGroundRing(rig, origin, s.groundRadius, s.duration * 0.85, s.color, math.clamp(s.transparency, 0, 1))
 	end
 end
 

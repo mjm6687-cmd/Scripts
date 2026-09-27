@@ -616,7 +616,8 @@ return {
 		---- THE VISIBLE SHOCKWAVE (read by Systems > RoarWave) ----
 		ForceField spheres bursting out from the mouth, seen by everyone, plus a
 		ripple along the ground for the big roars. Each roar has its own look:
-		R a huge slow layered wave, C one faint small pulse, V a fast hard red one.
+		R a huge slow layered wave, C one small pulse, V a fast hard one. All
+		white at 0.8 transparency by default.
 
 		roarWave = false switches it off for this creature. roarWaves overrides
 		any of these per roar; anything left out keeps the built-in value:
