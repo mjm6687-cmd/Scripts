@@ -199,7 +199,6 @@ local CORPSE_TOSS_RELEASE_AT = 0.7  -- 0-1 through the swing: when the body leav
 local CORPSE_TOSS_FORWARD = 9       -- studs/s launch speed forward...
 local CORPSE_TOSS_SIDE = 6          -- ...out to the right, the tossing arm's side...
 local CORPSE_TOSS_UP = 11           -- ...and up. Small on purpose: set aside, not hurled.
-local CORPSE_TOSS_NO_COLLIDE = 0.3  -- s before it's solid again, to clear the creature
 
 -- Where the hand closes on the headless body, in the torso's own space. The head
 -- sat 1.5 above the torso's centre, so this keeps the grip exactly where it was
@@ -551,10 +550,135 @@ local function detachFromHand(holder)
 end
 
 --[[
+	LETTING GO OF A BODY WITHOUT IT FALLING THROUGH THE WORLD.
+
+	Bodies used to go non-solid for a fraction of a second after leaving the
+	hand, so they wouldn't bump off the creature on the way out. But gravity
+	here is strong: in 0.3s a body dropped from mouth height is already INSIDE
+	the floor, and when its collision came back it was stuck there or fell out
+	of the map.
+
+	So a released body is solid again IMMEDIATELY, and only the creature is kept
+	out of its way: a NoCollisionConstraint between each of its parts and each
+	solid part of the creature, for a moment, then removed. The floor is never
+	off.
+
+	And a carried body isn't solid, so its legs can dangle through the floor. If
+	collision came back like that it would be trapped, so first: any solid part
+	sunk below the ground under it lifts the whole body just clear, and any
+	downward speed is dropped. Capped, so it can never pop a body up onto a roof.
+--]]
+local RELEASE_CLEAR_TIME = 0.6   -- s a released body can't touch the creature
+local MAX_GROUND_LIFT = 6        -- studs; the most a sunk body is lifted
+
+local function noCollideWithCreature(rig: Model, parts, duration: number)
+	local creatureSolid = {}
+	for _, d in ipairs(rig:GetDescendants()) do
+		if d:IsA("BasePart") and d.CanCollide then
+			table.insert(creatureSolid, d)
+		end
+	end
+	if #creatureSolid == 0 then
+		return
+	end
+
+	local made = {}
+	for _, part in ipairs(parts or {}) do
+		if part.Parent then
+			for _, mine in ipairs(creatureSolid) do
+				local ncc = Instance.new("NoCollisionConstraint")
+				ncc.Name = "CreatureReleaseNoCollide"
+				ncc.Part0 = part
+				ncc.Part1 = mine
+				-- On the BODY, so it goes wherever the body goes (the ragdoll moves
+				-- a dying body's parts into a new model).
+				ncc.Parent = part
+				table.insert(made, ncc)
+			end
+		end
+	end
+
+	task.delay(duration, function()
+		for _, ncc in ipairs(made) do
+			if ncc.Parent then
+				ncc:Destroy()
+			end
+		end
+	end)
+end
+
+local liftParams = RaycastParams.new()
+liftParams.FilterType = Enum.RaycastFilterType.Exclude
+liftParams.IgnoreWater = true
+
+local function liftOutOfGround(body: Model, rig: Model?)
+	local core = body:FindFirstChild("Torso")
+		or body:FindFirstChild("UpperTorso")
+		or body:FindFirstChild("HumanoidRootPart")
+	if not (core and core:IsA("BasePart")) then
+		return
+	end
+
+	local exclude = { body }
+	if rig then
+		table.insert(exclude, rig)
+	end
+	liftParams.FilterDescendantsInstances = exclude
+
+	-- Rays start from a height that's known to be above the floor: the body's
+	-- core or the creature's own root (it's standing on the floor), whichever is
+	-- higher. A ray that starts INSIDE the floor can't see it.
+	local rigRoot = rig and rig:FindFirstChild("HumanoidRootPart")
+	local safeY = core.Position.Y
+	if rigRoot and rigRoot:IsA("BasePart") then
+		safeY = math.max(safeY, rigRoot.Position.Y)
+	end
+
+	local lift = 0
+	for _, part in ipairs(body:GetDescendants()) do
+		if part:IsA("BasePart") and part.CanCollide and not part.Anchored then
+			-- Lowest point of the part as it's actually rotated.
+			local cf, size = part.CFrame, part.Size
+			local halfY = 0.5 * (math.abs(cf.RightVector.Y) * size.X
+				+ math.abs(cf.UpVector.Y) * size.Y
+				+ math.abs(cf.LookVector.Y) * size.Z)
+			local bottom = part.Position.Y - halfY
+
+			local fromY = math.max(safeY, part.Position.Y + halfY) + 0.5
+			local hit = workspace:Raycast(
+				Vector3.new(part.Position.X, fromY, part.Position.Z),
+				Vector3.new(0, -(fromY - bottom + 1), 0),
+				liftParams
+			)
+			if hit and hit.Position.Y > bottom then
+				lift = math.max(lift, hit.Position.Y - bottom + 0.05)
+			end
+		end
+	end
+
+	if lift <= 0 then
+		return
+	end
+	lift = math.min(lift, MAX_GROUND_LIFT)
+
+	pcall(function()
+		body:PivotTo(body:GetPivot() + Vector3.new(0, lift, 0))
+	end)
+	for _, part in ipairs(body:GetDescendants()) do
+		if part:IsA("BasePart") and not part.Anchored then
+			local v = part.AssemblyLinearVelocity
+			if v.Y < 0 then
+				part.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z)
+			end
+		end
+	end
+end
+
+--[[
 	`thrown` = the victim is leaving the hand through the air rather than being
-	put down. They stay ragdolled, keep no collision for a moment (so they don't
-	clip the creature on the way out), and don't get up until the throw code says
-	so. Returns the grab record so the throw can finish the job.
+	put down. They stay ragdolled, can't touch the creature for a moment (so they
+	don't clip it on the way out), and don't get up until the throw code says so.
+	Returns the grab record so the throw can finish the job.
 --]]
 local function releaseVictim(rig: Model, killed: boolean, thrown: boolean?)
 	local grab = grabs[rig]
@@ -578,8 +702,12 @@ local function releaseVictim(rig: Model, killed: boolean, thrown: boolean?)
 		victim:SetAttribute("Grabbed", false)
 		victim:SetAttribute("GrabbedBy", nil)
 
+		-- Solid again straight away (a thrown body a frame later, from the throw
+		-- loop), with only the creature kept out of the way. See the note above.
+		noCollideWithCreature(rig, grab.heldParts, RELEASE_CLEAR_TIME)
 		if not thrown then
 			restoreCollisions(grab)
+			liftOutOfGround(victim, rig)
 		end
 
 		-- Weight back BEFORE any kill below, so the corpse clone the ragdoll makes
@@ -1192,8 +1320,14 @@ local function releaseCorpse(rig: Model, tossed: boolean)
 		end
 	end
 
+	-- Solid NOW, with only the creature kept out of the way, and lifted clear if
+	-- anything dangling in the hand had sunk into the floor. Waiting to make it
+	-- solid is what let it drop through the ground.
+	noCollideWithCreature(rig, rec.parts, RELEASE_CLEAR_TIME)
+	solidAgain()
+	liftOutOfGround(corpse, rig)
+
 	if not tossed then
-		solidAgain()
 		setBodyOwner(rec.parts, "auto")
 		return
 	end
@@ -1220,13 +1354,6 @@ local function releaseCorpse(rig: Model, tossed: boolean)
 		end
 	end
 
-	-- Clear of the creature first, THEN solid, or it bounces off the creature's
-	-- own legs on the way out.
-	task.delay(CORPSE_TOSS_NO_COLLIDE, function()
-		if corpse.Parent then
-			solidAgain()
-		end
-	end)
 	-- Once it has settled, physics goes back to whoever Roblox picks.
 	task.delay(3, function()
 		if corpse.Parent then
@@ -1822,7 +1949,10 @@ local THROW_DEFAULTS = {
 	throwFollowTime = 0.3,    -- follow-through before the arm settles
 }
 
-local THROW_NO_COLLIDE = 0.2      -- s of no collision after release, to clear the creature
+-- s of NO collision at all after release. 0 now: the body is kept off the
+-- creature by NoCollisionConstraints instead (releaseVictim), so the floor is
+-- never switched off -- that gap is how thrown bodies went through the ground.
+local THROW_NO_COLLIDE = 0
 local THROW_IMPACT_DROP = 22      -- studs/s of speed lost in one frame = hit something
 local THROW_GROUND_RAY = 3.2      -- studs under the root that counts as landed
 local THROW_MAX_FLIGHT = 6        -- failsafe: counts as landed after this (no damage)
