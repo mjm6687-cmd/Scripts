@@ -213,6 +213,43 @@ function CreatureService.Morph(player: Player, creatureName: string)
 	end
 
 	--[[
+		ONLY THE BODY'S CORE COLLIDES.
+
+		Roblox keeps a character's own arms and legs from hitting the world, but
+		not the extra parts inside them -- and the creature's limbs are FULL of
+		mesh parts. Any of those left colliding scrape the floor when the arm
+		swings back and down (the throw wind-up, a reach at the ground, the torso
+		leaning back), and every scrape shoves the whole creature: it slides about
+		on its own.
+
+		So HumanoidRootPart, Torso and Head -- what the Humanoid itself uses to
+		stand and to meet walls -- keep their collision, and everything else is
+		switched off. The decorative parts (anything that isn't one of the R6 body
+		parts) are also made weightless, so a heavy claw on the end of a swinging
+		arm can't drag the creature's balance around either.
+
+		A part that SHOULD collide (a big shell that ought to stop at walls, say)
+		can opt out with a KeepCollision attribute set to true.
+	--]]
+	local CORE_COLLISION = { HumanoidRootPart = true, Torso = true, Head = true }
+	local R6_BODY = {
+		HumanoidRootPart = true, Torso = true, Head = true,
+		["Left Arm"] = true, ["Right Arm"] = true,
+		["Left Leg"] = true, ["Right Leg"] = true,
+	}
+	for _, d in ipairs(rig:GetDescendants()) do
+		if d:IsA("BasePart") and d:GetAttribute("KeepCollision") ~= true then
+			local isBodyPart = d.Parent == rig and R6_BODY[d.Name] == true
+			if not (d.Parent == rig and CORE_COLLISION[d.Name]) then
+				d.CanCollide = false
+			end
+			if not isBodyPart then
+				d.Massless = true
+			end
+		end
+	end
+
+	--[[
 		Publish the rig's joint bases as attributes, from the TEMPLATE, before
 		anything has had a chance to touch them.
 
