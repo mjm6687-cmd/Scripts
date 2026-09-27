@@ -2035,7 +2035,13 @@ local function UpdateViewmodelPosition(dt:number)
 			* pushbackGripOffset:Inverse()
 	end
 	animBase.CFrame *= CFrame.new(0, 0, cam.pushbackOffset)
-	local relativeVelocity = humanoidRootPart.CFrame:VectorToObjectSpace(humanoidRootPart.Velocity)
+	-- Relative to the seat when seated (see the note on linVel further down): a
+	-- vehicle sliding sideways must not roll the gun 25 degrees.
+	local rollVel = humanoidRootPart.AssemblyLinearVelocity
+	if humanoid.SeatPart then
+		rollVel -= humanoid.SeatPart.AssemblyLinearVelocity
+	end
+	local relativeVelocity = humanoidRootPart.CFrame:VectorToObjectSpace(rollVel)
 	local targetRollAngle = 0
 	if not aiming then targetRollAngle = math.clamp(-relativeVelocity.X, -config.maxStrafeRoll, config.maxStrafeRoll) end
 	cam.rollAngle = LerpNumber(cam.rollAngle, targetRollAngle, 0.07 * dt * 60)
@@ -3510,7 +3516,10 @@ svc.runService.RenderStepped:Connect(function(dt:number)
 			cycling     = flags.chambering,
 			-- Horizontal speed, so the scope can damp the eye box while you're moving:
 			-- walk bob isn't your eye actually leaving the glass.
-			moveSpeed   = (humanoidRootPart.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude,
+			-- Relative to the seat when seated: riding in a vehicle isn't your eye moving.
+			moveSpeed   = ((humanoidRootPart.AssemblyLinearVelocity
+				- (humanoid.SeatPart and humanoid.SeatPart.AssemblyLinearVelocity or Vector3.zero))
+				* Vector3.new(1, 0, 1)).Magnitude,
 			blocked     = blocked or flags.sprinting or (flags.reloading and not flags.chambering) or flags.inspecting or flags.meleeing,
 		})
 		-- Published for CameraBobAndFallSway, which fades the ADS camera cant out by this
@@ -3768,7 +3777,21 @@ svc.runService.RenderStepped:Connect(function(dt:number)
 		tempDampening -= difference
 		if aiming then tempDampening *= config.aimBobDampening end
 
+		--[[
+			VELOCITY RELATIVE TO WHAT YOU'RE SITTING IN.
+
+			Everything below (bob size, the inertia drift, the acceleration kicks) is
+			about YOU moving. In a vehicle or helicopter the root part moves at the
+			vehicle's speed, and at 100 studs/s that fed the inertia spring a target
+			thirteen times a sprint -- the whole viewmodel flew forward/back and
+			wobbled with every change of speed. Seated, you move WITH the seat, so
+			it's the difference that counts, which is essentially nothing.
+		--]]
 		local linVel = humanoidRootPart.AssemblyLinearVelocity
+		local seatPart = humanoid.SeatPart
+		if seatPart then
+			linVel -= seatPart.AssemblyLinearVelocity
+		end
 		local flatSpeed = Vector2.new(linVel.X, linVel.Z).Magnitude
 		local grounded = (not humanoid.Sit) and humanoid.FloorMaterial ~= Enum.Material.Air
 		local bob = springs.bobState
@@ -3855,7 +3878,18 @@ svc.runService.RenderStepped:Connect(function(dt:number)
 			springs.fovKickVal = config.jumpFOVKick or -4 -- quick FOV narrow when leaving the ground
 		end
 		bob.wasGrounded = grounded
-		springs.inertia.t = bob.velSmooth / cfgWalk * inertiaScale
+		-- Capped just above a full sprint (sprintSpeed / walkSpeed is ~2.4) on the
+		-- horizontal axes, so a moving platform or being flung can never shove the
+		-- viewmodel off like a vehicle did. Vertical is left alone: that's the float
+		-- while falling.
+		do
+			local target = bob.velSmooth / cfgWalk * inertiaScale
+			springs.inertia.t = Vector3.new(
+				math.clamp(target.X, -2.5, 2.5),
+				target.Y,
+				math.clamp(target.Z, -2.5, 2.5)
+			)
+		end
 		local iv = springs.inertia.p
 		local strafe = math.clamp(iv.X, -1.0, 1.0) -- cap the side lean at sprint speeds
 		-- Pure roll into strafes (a clean sideways tilt, like leaning -- NO yaw twist),
