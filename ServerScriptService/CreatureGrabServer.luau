@@ -1821,6 +1821,10 @@ local function doEat(rig: Model)
 		playCreatureSound(rig, "Eat")
 		emitBlood(rig, "Kill")
 
+		-- Hot from the kill: CreatureHeat reads this and makes the creature glow on
+		-- thermals for a while after feeding.
+		rig:SetAttribute("LastFed", workspace:GetServerTimeNow())
+
 		--[[
 			ARMED BEFORE THE KILL, not after.
 

@@ -804,6 +804,23 @@ return {
 	thermalDebug = false,
 
 	-- =====================
+	-- THERMAL SIGNATURE  (read by CreatureHeat, on the server)
+	-- =====================
+	-- How this creature looks on PLAYERS' thermals (the NVG ECOTI outlines and the
+	-- Recon Drone's IR modes). It's cold-blooded: faint at rest, hotter when it
+	-- sprints, roars or feeds, cooling off afterwards. 1 = as bright as a normal
+	-- body, 0 = invisible. The hottest layer wins; they don't add up.
+	heatBase = 0.15,          -- at rest: a faint shape you have to be looking for
+	heatSprintMax = 0.75,     -- fully exerted from sprinting
+	heatSprintBuild = 1.5,    -- s of sprinting to get there
+	heatSprintCool = 5,       -- s to cool back down after stopping
+	heatRoar = 1,             -- the flash when it roars: gives its position away
+	heatRoarHold = 0.4,       -- s at full flash
+	heatRoarFade = 3,         -- s to fade from the flash
+	heatFed = 0.9,            -- right after a kill
+	heatFedFade = 25,         -- s for the kill's heat to fade
+
+	-- =====================
 	-- NIGHT VISION  (read by Systems > NightVision) ? key N
 	-- =====================
 	-- Not a tint and not an overlay: it raises the actual scene light, so detail

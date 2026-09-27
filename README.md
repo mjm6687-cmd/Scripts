@@ -23,7 +23,8 @@ ServerScriptService
 ├── CreatureGrabServer          Script
 ├── CreatureRoarServer          Script
 ├── CreatureHeadServer          Script
-└── CreatureBreathing           Script
+├── CreatureBreathing           Script
+└── CreatureHeat                Script  (thermal signature)
 
 StarterPlayer
 └── StarterPlayerScripts
@@ -64,7 +65,16 @@ StarterPlayer
     └── SPH_Character           Folder
         ├── CharacterClient     LocalScript
         └── CharacterMovement   LocalScript
+
+StarterPack
+└── Recon Drone                 Tool
+    ├── DroneClient             LocalScript
+    └── DroneSensors            ModuleScript
 ```
+
+`Gear/NVG/NightVision.luau` is the LocalScript that goes **inside the NVG device
+model** (anywhere in it) -- wherever your Arsenal keeps that model. It isn't a
+fixed Explorer location, so it has its own folder here.
 
 Notes:
 - `CreatureClient/CreatureClient.luau` is the LocalScript itself. The `Systems`

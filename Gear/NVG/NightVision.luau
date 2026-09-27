@@ -765,6 +765,17 @@ local function ecotiScan()
 			want = math.clamp((range - ranked[i].dist) / fadeDist, 0, 1)
 		end
 
+		-- A CREATURE is cold-blooded: faint at rest, hotter when it sprints, roars or
+		-- feeds. The server publishes how hot it is right now as ThermalHeat (0-1,
+		-- see CreatureHeat); the outline is scaled by it. Anything without the
+		-- attribute shows at full strength, exactly as before.
+		if (model :: any):GetAttribute("IsCreature") == true then
+			local heat = (model :: any):GetAttribute("ThermalHeat")
+			if typeof(heat) == "number" then
+				want *= math.clamp(heat, 0, 1)
+			end
+		end
+
 		local entry = ecotiPool[model]
 		-- want <= 0 means this target is sitting exactly at the edge of EcotiRange, so
 		-- a brand-new entry would be created here at alpha 0 / want 0 and destroyed by

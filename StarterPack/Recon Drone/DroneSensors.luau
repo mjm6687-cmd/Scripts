@@ -393,6 +393,15 @@ local function thermalScan(look)
 		if fadeDist > 0 then
 			want = math.clamp((range - ranked[i].dist) / fadeDist, 0, 1)
 		end
+		-- A CREATURE is cold-blooded: faint at rest, hotter when it sprints, roars or
+		-- feeds. Scaled by the ThermalHeat the server publishes (0-1, see
+		-- CreatureHeat). Anything without it shows at full strength.
+		if model:GetAttribute("IsCreature") == true then
+			local heat = model:GetAttribute("ThermalHeat")
+			if typeof(heat) == "number" then
+				want *= math.clamp(heat, 0, 1)
+			end
+		end
 		local entry = thermalPool[model]
 		if not entry and want <= 0 then continue end
 		if not entry or not entry.hl.Parent then
