@@ -76,6 +76,13 @@ StarterPack
 model** (anywhere in it) -- wherever your Arsenal keeps that model. It isn't a
 fixed Explorer location, so it has its own folder here.
 
+## Assets
+
+`Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,
+`aurora_glow.png`, `aurora_ray.png`), `AuroraBuilder.luau` (run in Studio's
+Command Bar after uploading the textures), a `preview.png`, and the Python
+script that generated the textures.
+
 Notes:
 - `CreatureClient/CreatureClient.luau` is the LocalScript itself. The `Systems`
   folder next to it goes **inside** that LocalScript in Studio.
