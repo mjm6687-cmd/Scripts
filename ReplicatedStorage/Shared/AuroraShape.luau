@@ -33,21 +33,24 @@ local FOLD_DEPTH = 450      -- how far a fold pushes the curtain sideways
 local FLIP_VERTICAL = true  -- true: the bright edge lands at the bottom (right for these textures)
 
 -- Motion.
-local WAVE_AMP = NumberRange.new(50, 130)        -- studs a curtain ripples sideways
-local WAVE_PERIOD = NumberRange.new(25, 50)      -- seconds for a ripple to pass
-local HEIGHT_BREATHE = 0.12                      -- how much heights rise and fall (fraction)
-local PULSE = NumberRange.new(0.15, 0.35)        -- bright patches travelling along (fraction)
-local SURGE_BRIGHT = 1.2                         -- extra brightness at a full surge (x power)
-local SURGE_MOTION = 1.5                         -- extra ripple size and speed at a full surge
+local SPEED = 1                                  -- ONE KNOB for all motion: 0.5 = half as fast, 2 = twice
+local WAVE_AMP = NumberRange.new(50, 120)        -- studs a curtain ripples sideways
+local WAVE_PERIOD = NumberRange.new(70, 140)     -- seconds for a ripple to pass
+local HEIGHT_BREATHE = 0.08                      -- how much heights rise and fall (fraction)
+local HEIGHT_PERIOD = NumberRange.new(80, 160)   -- seconds per rise and fall
+local PULSE = NumberRange.new(0.06, 0.14)        -- bright patches drifting along (fraction)
+local PULSE_PERIOD = NumberRange.new(90, 180)    -- seconds for a bright patch to drift past
+local SURGE_BRIGHT = 1.0                         -- extra brightness at a full surge (x power)
+local SURGE_MOTION = 0.6                         -- extra ripple size and speed at a full surge
 
 --[[
 	What each kind of night looks like. Counts are {min, max}; the rest scale the
 	base shapes below. sheets2 = chance a curtain gets a second sheet.
 --]]
 local ACTIVITY = {
-	Quiet  = { arcs = { 1, 1 }, bands = { 1, 3 }, bright = 0.7,  height = 0.85, bend = 0.7, curl = 0.15, arcSheets2 = 0.3, bandSheets2 = 0.15, motion = 0.7 },
-	Active = { arcs = { 1, 2 }, bands = { 3, 5 }, bright = 1.0,  height = 1.0,  bend = 1.0, curl = 0.4,  arcSheets2 = 0.7, bandSheets2 = 0.4,  motion = 1.0 },
-	Storm  = { arcs = { 2, 3 }, bands = { 5, 7 }, bright = 1.3,  height = 1.15, bend = 1.3, curl = 0.6,  arcSheets2 = 1.0, bandSheets2 = 0.6,  motion = 1.4 },
+	Quiet  = { arcs = { 1, 1 }, bands = { 1, 3 }, bright = 0.7,  height = 0.85, bend = 0.7, curl = 0.15, arcSheets2 = 0.3, bandSheets2 = 0.15, motion = 0.6 },
+	Active = { arcs = { 1, 2 }, bands = { 3, 5 }, bright = 1.0,  height = 1.0,  bend = 1.0, curl = 0.4,  arcSheets2 = 0.7, bandSheets2 = 0.4,  motion = 0.8 },
+	Storm  = { arcs = { 2, 3 }, bands = { 5, 7 }, bright = 1.3,  height = 1.15, bend = 1.3, curl = 0.6,  arcSheets2 = 1.0, bandSheets2 = 0.6,  motion = 1.0 },
 }
 AuroraShape.ACTIVITY = ACTIVITY
 
@@ -303,11 +306,11 @@ local function buildCurtain(sky, folder: Instance, name: string, start: Vector3,
 		waveAmp = sky.pick(WAVE_AMP),
 		waveSpeed = TAU / sky.pick(WAVE_PERIOD),
 		waveCount = rng:NextNumber(1.5, 3.5) * (#points / 30),
-		heightSpeed = TAU / rng:NextNumber(30, 60),
+		heightSpeed = TAU / sky.pick(HEIGHT_PERIOD),
 		heightWaves = rng:NextNumber(1, 2.5),
 		pulse = sky.pick(PULSE),
-		pulseSpeed = TAU / rng:NextNumber(12, 30) * sky.sign(),
-		pulseWaves = rng:NextNumber(1.5, 4),
+		pulseSpeed = TAU / sky.pick(PULSE_PERIOD) * sky.sign(),
+		pulseWaves = rng:NextNumber(1, 2.5),
 		-- Reused every Update so nothing is allocated per frame.
 		offsets = table.create(#points, Vector3.zero),
 		scales = table.create(#points, 1),
@@ -418,7 +421,7 @@ function AuroraShape.Update(shape, dt: number, visibility: number, surge: number
 	end
 	if not shape.enabled then setEnabled(shape, true) end
 
-	local motion = shape.motion * (1 + surge * SURGE_MOTION)
+	local motion = SPEED * shape.motion * (1 + surge * SURGE_MOTION)
 	shape.clock += dt * motion
 	local t = shape.clock
 	local glowMul = visibility * (1 + surge * SURGE_BRIGHT)
