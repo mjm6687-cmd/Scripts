@@ -76,11 +76,36 @@ StarterPack
 model** (anywhere in it) -- wherever your Arsenal keeps that model. It isn't a
 fixed Explorer location, so it has its own folder here.
 
+## Sky (day/night cycle and aurora)
+
+```
+ReplicatedStorage
+└── Shared
+    └── AuroraShape             ModuleScript (builds + animates the aurora)
+
+ServerScriptService
+├── LightingCycle               Script  (day/night cycle)
+└── AuroraServer                Script  (rolls each night's aurora)
+
+StarterPlayer
+└── StarterPlayerScripts
+    └── AuroraClient            LocalScript (builds the aurora on each client)
+
+Workspace
+└── AuroraCenter                Part you place: the middle of the aurora
+```
+
+`AuroraCenter` is an anchored, invisible, non-colliding Part anywhere in
+Workspace. Its front face sets which way the main arcs run; an optional number
+attribute `Area` sets how far the aurora spreads (default 10000 studs). Every
+night gets a new random sky around it. For testing, set the Lighting attribute
+`AuroraForce` to `Quiet`/`Active`/`Storm`/`None`, or tick `AuroraReroll`.
+
 ## Assets
 
 `Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,
-`aurora_glow.png`, and `aurora_ray.png`, which is no longer used), `AuroraBuilder.luau` (run in Studio's
-Command Bar after uploading the textures), a `preview.png`, and the Python
+`aurora_glow.png`, and `aurora_ray.png`, which is no longer used), `AuroraBuilder.luau` (a static
+command-bar preview; the real aurora is the Sky scripts above), a `preview.png`, and the Python
 script that generated the textures.
 
 Notes:
