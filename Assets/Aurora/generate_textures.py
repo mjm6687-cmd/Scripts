@@ -20,16 +20,19 @@ W, H = 1024, 512
 y = (np.arange(H) / (H - 1))[:, None]          # 0 top .. 1 bottom
 # ---- CURTAIN ----
 edge = 0.80 + 0.06*(tile_noise(W, 1, 5, 6) - 0.5)            # wavy lower edge
-rays = tile_noise(W, 18, 140, 90, power=0.35)                # fine vertical rays
-rays = rays**2.2                                             # sharpen into streaks
-folds = tile_noise(W, 1, 7, 10)**1.6                         # big bright/dim folds, real gaps
-reach = 0.18 + 0.30*tile_noise(W, 6, 40, 30)                 # how far each ray climbs
+# Rays are brighter STREAKS in a continuous sheet -- never gaps. Two layers: a
+# coarse set of distinct rays and a fine, dense striation over everything.
+coarse = tile_noise(W, 30, 160, 90, power=0.35)**1.6
+fine = tile_noise(W, 150, 480, 160, power=0.2)
+rays = 0.6*coarse + 0.4*fine
+folds = tile_noise(W, 1, 7, 10)**1.3                         # big bright/dim folds (the builder adds knots too)
+reach = 0.22 + 0.26*tile_noise(W, 6, 40, 30)                 # how far each ray climbs
 h = edge[None, :] - y                                        # height above lower edge
 above = np.exp(-np.clip(h, 0, None) / reach[None, :])        # fade upward
 below = np.exp(-np.clip(-h, 0, None) / 0.012)                # razor bottom edge
 profile = np.where(h >= 0, above, below)
-ray_mix = 0.45 + 0.55*rays[None, :]
-intensity = profile * ray_mix * (0.12 + 0.88*folds[None, :])
+ray_mix = 0.62 + 0.38*rays[None, :]   # the sheet never drops out between rays
+intensity = profile * ray_mix * (0.35 + 0.65*folds[None, :])
 # the upper colours are a faint tint, not a band of their own
 intensity *= 1 - 0.55*smoothstep(0.12, 0.55, np.clip(h, 0, None))
 intensity *= 1 - smoothstep(0.0, 0.06, 0.06 - y)             # never touch the very top
