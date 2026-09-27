@@ -76,7 +76,6 @@ local SwimController = require(modules.SwimController)
 local config = require(replicatedStorage.SPH_Assets.GameConfig)
 local c0Ref = CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, -0)
 
-local maxTiltAngle = config.maxLeanAngle
 local movementVector = Vector3.zero
 
 local canChangeWalkSpeed = script:GetAttribute("CanChangeWalkSpeed")
@@ -1104,22 +1103,11 @@ local function UpdateCharacterTilt(character, deltaTime)
 	local joint = root and root:FindFirstChild("RootJoint")
 	if not hum or hum.Health <= 0 or not root or not joint then return end
 
-	local isLocal = (character == playerCharacter)
 	local currentTilt = c0Ref:Inverse() * joint.C0
 
-	-- Lean (movement body tilt) ? LOCAL player only. Remote lean is applied to
-	-- RootJoint.C1 separately by PlayerClient, so applying it here too would double it.
-	local leanTarget = CFrame.identity
-	if isLocal and config.movementLeaning then
-		local MoveDirection = root.CFrame:VectorToObjectSpace(hum.MoveDirection)
-		leanTarget = CFrame.Angles(math.rad(-MoveDirection.Z) * maxTiltAngle, math.rad(-MoveDirection.X) * maxTiltAngle, 0)
-		if hum.Sit
-			or script:GetAttribute("DisableLean")
-			or character:GetAttribute("SeatAnim")
-			or character:GetAttribute("Stance") == "Prone" then
-			leanTarget = CFrame.identity
-		end
-	end
+	-- (The movement lean -- tilting the body toward the direction you walk -- was
+	-- removed. Only terrain alignment drives this joint now. Q/E corner leaning is
+	-- a separate system and is untouched.)
 
 	-- Terrain alignment (clamped per stance) ? applied to every character via C0.
 	-- Disabled while seated.
@@ -1128,8 +1116,7 @@ local function UpdateCharacterTilt(character, deltaTime)
 		terrainTarget = ComputeTerrainTilt(character, root, hum, getTerrainMaxAngleFor(character))
 	end
 
-	-- Terrain is the base orientation; lean layers on top of it.
-	local target = terrainTarget * leanTarget
+	local target = terrainTarget
 
 	local tilt = currentTilt:Lerp(target, 0.2 ^ (1 / (deltaTime * 60)))
 	joint.C0 = c0Ref * tilt
@@ -1835,13 +1822,12 @@ runService.RenderStepped:Connect(function(deltaTime)
 		return
 	end
 
-	if config.movementLeaning or TERRAIN.enabled then
+	-- Terrain alignment, for this character and everyone else's.
+	if TERRAIN.enabled then
 		UpdateCharacterTilt(playerCharacter, deltaTime)
-		if config.replicateMovementLeaning or TERRAIN.enabled then
-			for _, player in ipairs(players:GetPlayers()) do
-				if player ~= localPlayer and player.Character then
-					UpdateCharacterTilt(player.Character, deltaTime)
-				end
+		for _, player in ipairs(players:GetPlayers()) do
+			if player ~= localPlayer and player.Character then
+				UpdateCharacterTilt(player.Character, deltaTime)
 			end
 		end
 	end

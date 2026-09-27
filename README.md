@@ -49,6 +49,10 @@ StarterPlayer
 ## Human (SPH gun framework, movement, footsteps)
 
 ```
+ReplicatedStorage
+└── SPH_Assets                  Folder (the rest of it is not in this repo)
+    └── GameConfig              ModuleScript
+
 ServerScriptService
 └── SPH_Server                  Script
 
@@ -69,8 +73,8 @@ Notes:
   has a different name, the two rig scripts go inside that Model instead.
 - RemoteEvents (`CreatureRoarRemote`, `CreatureLookRemote`, etc.) are created
   at runtime by the server scripts; nothing to add by hand.
-- The human scripts depend on `ReplicatedStorage.SPH_Assets` (GameConfig,
-  modules, animations, sounds), which is not in this repo.
+- The human scripts depend on `ReplicatedStorage.SPH_Assets` (modules,
+  animations, sounds). Only its `GameConfig` is in this repo.
 - Two creature-side files share names with human-side ones: the creature's
   `Systems/Footsteps` (ModuleScript) and the human `StarterPlayerScripts/Footsteps`
   (LocalScript) are different scripts in different places.
