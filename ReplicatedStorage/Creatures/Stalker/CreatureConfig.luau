@@ -425,9 +425,9 @@ return {
 
 	-- Over-the-shoulder camera while aiming (and through the throw itself). The body
 	-- turns to face your aim while it's on.
-	throwAimShoulderRight = -2.4, -- studs the camera shifts right. NEGATIVE = left shoulder
+	throwAimShoulderRight = -3.4, -- studs the camera shifts right. NEGATIVE = left shoulder (was -2.4)
 	throwAimShoulderUp = 1.0,     -- and up
-	throwAimZoom = 7,             -- camera distance while aiming. Lower = closer
+	throwAimZoom = 5.5,           -- camera distance while aiming. Lower = closer (was 7)
 	throwAimCameraSpeed = 9,      -- how fast it eases in and out
 
 	-- The throw animation: the arm cocks back behind the head, then whips forward

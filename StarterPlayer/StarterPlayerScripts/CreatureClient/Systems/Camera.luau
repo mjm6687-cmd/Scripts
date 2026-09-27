@@ -21,7 +21,7 @@ local DEFAULTS = {
 	cameraMaxZoom = 16,
 
 	-- Over-the-shoulder aim (throw). See CreatureConfig's THROW section.
-	throwAimShoulderRight = -2.4,  -- negative = over the LEFT shoulder
+	throwAimShoulderRight = -3.4,  -- negative = over the LEFT shoulder
 	throwAimShoulderUp = 1.0,
 	throwAimZoom = 7,
 	throwAimCameraSpeed = 9,
