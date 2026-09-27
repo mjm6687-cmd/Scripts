@@ -20,9 +20,9 @@
 ]]
 
 local TEXTURES = {
-	curtain = "rbxassetid://0", -- aurora_curtain.png
-	glow    = "rbxassetid://0", -- aurora_glow.png
-	ray     = "rbxassetid://0", -- aurora_ray.png
+	curtain = "rbxassetid://92716280606048", -- aurora_curtain.png
+	glow    = "rbxassetid://131041612949925", -- aurora_glow.png
+	ray     = "rbxassetid://100799507043869", -- aurora_ray.png
 }
 
 -- Where it hangs. It's built around CENTER, DISTANCE studs away toward DIRECTION
