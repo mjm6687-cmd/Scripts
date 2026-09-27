@@ -1,9 +1,8 @@
 -- RoarWave  (ModuleScript, under CreatureClient > Systems)
 --
 -- The roar made visible: shells of ForceField-material spheres bursting out
--- from the creature's mouth, and for the big roars a ripple running out along
--- the ground. Everyone sees it -- the roar is loud enough that the air itself
--- shows it.
+-- from the creature's mouth. Everyone sees it -- the roar is loud enough that
+-- the air itself shows it.
 --
 -- ============================================================
 -- WHY EACH CLIENT DRAWS ITS OWN
@@ -45,24 +44,19 @@ local System = {
 	  ringShrink    each later shell's radius as a fraction of the one before
 	  color         ForceField glows in this colour
 	  transparency  how see-through each shell starts (1 = invisible)
-	  groundRing    also send a flat ripple out along the ground
-	  groundRadius  how far that ripple reaches
 --]]
 local WAVE_DEFAULTS = {
 	[1] = { -- R, broadcast: calling across the map. Big, slow, layered.
 		radius = 170, duration = 2.4, rings = 3, ringGap = 0.2, ringShrink = 0.8,
 		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
-		groundRing = true, groundRadius = 120,
 	},
 	[2] = { -- C, passive: close range, barely there. You have to be near it.
 		radius = 22, duration = 1.3, rings = 1, ringGap = 0, ringShrink = 1,
 		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
-		groundRing = false, groundRadius = 0,
 	},
 	[3] = { -- V, aggressive: aimed at someone. Fast and hard.
 		radius = 65, duration = 0.95, rings = 2, ringGap = 0.09, ringShrink = 0.75,
 		color = Color3.fromRGB(255, 255, 255), transparency = 0.8,
-		groundRing = true, groundRadius = 45,
 	},
 }
 
@@ -179,50 +173,6 @@ local function spawnShell(origin: Vector3, radius: number, duration: number, col
 	Debris:AddItem(shell, duration + 0.1)
 end
 
---[[
-	The ground ripple: a flat disc laid on whatever is under the creature,
-	running out along the floor. Sells that the wave hit the world, not just the
-	air -- dust kicked up in a ring.
---]]
-local groundParams = RaycastParams.new()
-groundParams.FilterType = Enum.RaycastFilterType.Exclude
-groundParams.IgnoreWater = false
-
-local function spawnGroundRing(rig: Model?, origin: Vector3, radius: number, duration: number, color: Color3, transparency: number)
-	-- Built up rather than written { rig, folder }: rig can be nil (streamed out),
-	-- and a nil first entry would leave the list empty.
-	local exclude = { ensureFolder() }
-	if rig then
-		table.insert(exclude, rig)
-	end
-	groundParams.FilterDescendantsInstances = exclude
-	local hit = workspace:Raycast(origin, Vector3.new(0, -25, 0), groundParams)
-	if not hit then
-		return -- roaring off a cliff: no floor for a ripple to run along
-	end
-
-	local ring = plainPart(Enum.PartType.Cylinder, color)
-	ring.Name = "RoarGroundRing"
-	-- A Cylinder's axis is X, so X is its thickness; rotated 90 degrees about Z
-	-- it lies flat. Lifted a hair so it doesn't z-fight the floor.
-	ring.Size = Vector3.new(0.3, START_SIZE, START_SIZE)
-	ring.CFrame = CFrame.new(hit.Position + Vector3.new(0, 0.15, 0)) * CFrame.Angles(0, 0, math.rad(90))
-	ring.Transparency = transparency
-	ring.Parent = ensureFolder()
-
-	local diameter = radius * 2
-	TweenService:Create(ring,
-		TweenInfo.new(duration, SIZE_EASING.EasingStyle, SIZE_EASING.EasingDirection),
-		{ Size = Vector3.new(0.3, diameter, diameter) }
-	):Play()
-	TweenService:Create(ring,
-		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{ Transparency = 1 }
-	):Play()
-
-	Debris:AddItem(ring, duration + 0.1)
-end
-
 local function playWave(rig: Model?, index: number, serverOrigin: Vector3)
 	local s = waveSettings(rig, index)
 	if not s then
@@ -246,10 +196,6 @@ local function playWave(rig: Model?, index: number, serverOrigin: Vector3)
 		else
 			task.delay(delay, spawnShell, origin, radius, s.duration, s.color, transparency)
 		end
-	end
-
-	if s.groundRing and s.groundRadius > 0 then
-		spawnGroundRing(rig, origin, s.groundRadius, s.duration * 0.85, s.color, math.clamp(s.transparency, 0, 1))
 	end
 end
 

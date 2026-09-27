@@ -614,8 +614,8 @@ return {
 
 	--[[
 		---- THE VISIBLE SHOCKWAVE (read by Systems > RoarWave) ----
-		ForceField spheres bursting out from the mouth, seen by everyone, plus a
-		ripple along the ground for the big roars. Each roar has its own look:
+		ForceField spheres bursting out from the mouth, seen by everyone. Each
+		roar has its own look:
 		R a huge slow layered wave, C one small pulse, V a fast hard one. All
 		white at 0.8 transparency by default.
 
@@ -629,8 +629,6 @@ return {
 		  ringShrink    each later shell's size vs the one before (0-1)
 		  color         the ForceField glow colour
 		  transparency  how see-through each shell starts (1 = invisible)
-		  groundRing    true/false: the ripple along the floor
-		  groundRadius  how far the ripple reaches
 
 		e.g. roarWaves = { [1] = { radius = 250, color = Color3.fromRGB(255, 255, 255) } }
 	--]]
