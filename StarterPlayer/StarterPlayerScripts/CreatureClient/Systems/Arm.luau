@@ -11,6 +11,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
 local System = {
@@ -459,7 +460,6 @@ local arcFolder: Folder? = nil
 local arcAnchor: BasePart? = nil
 local arcPoints: { Attachment } = {}
 local arcBeams: { Beam } = {}
-local arcMarker: BasePart? = nil
 local arcParams = RaycastParams.new()
 arcParams.FilterType = Enum.RaycastFilterType.Exclude
 arcParams.IgnoreWater = true
@@ -525,13 +525,6 @@ local function ensureArc()
 		beam.Parent = anchor
 		arcBeams[i] = beam
 	end
-
-	local marker = plainPart(Enum.PartType.Cylinder)
-	marker.Name = "Landing"
-	marker.Size = Vector3.new(0.08, 3.2, 3.2)
-	marker.Transparency = 1
-	marker.Parent = arcFolder
-	arcMarker = marker
 end
 
 local function hideArc()
@@ -540,9 +533,6 @@ local function hideArc()
 	end
 	for _, beam in ipairs(arcBeams) do
 		beam.Enabled = false
-	end
-	if arcMarker then
-		arcMarker.Transparency = 1
 	end
 end
 
@@ -568,7 +558,6 @@ local function drawArc(state)
 	local g = Vector3.new(0, -workspace.Gravity, 0)
 	local prev = origin
 	arcPoints[0].WorldPosition = origin
-	local landed: RaycastResult? = nil
 	local used = 0
 
 	for i = 1, ARC_MAX_SEG do
@@ -577,8 +566,7 @@ local function drawArc(state)
 		local hit = workspace:Raycast(prev, p - prev, arcParams)
 		if hit then
 			-- The last stretch ends exactly where it hits, so the line meets the
-			-- landing marker instead of stopping short of it or passing through.
-			landed = hit
+			-- surface instead of stopping short of it or passing through.
 			arcPoints[i].WorldPosition = hit.Position
 			used = i
 			break
@@ -591,16 +579,110 @@ local function drawArc(state)
 	for i = 1, ARC_MAX_SEG do
 		arcBeams[i].Enabled = i <= used
 	end
+end
 
-	if landed and arcMarker then
-		local up = landed.Normal
-		-- A cylinder's flat faces point along X, so X goes onto the surface normal.
-		arcMarker.CFrame = CFrame.lookAt(landed.Position + up * 0.05, landed.Position + up * 1.05)
-			* CFrame.Angles(0, math.rad(90), 0)
-		arcMarker.Transparency = 0.35
-	elseif arcMarker then
-		arcMarker.Transparency = 1
+--[[
+	KEEPING THE BODY ON THE LINE.
+
+	Launched right, a body still drifts: it's a ragdoll, and its own limbs
+	swinging and knocking into each other shove the torso off the curve (plus
+	any air resistance the game has on). So for the flight, the thrower's
+	client -- which is simulating the body anyway -- steers the TORSO back onto
+	the exact parabola the line was drawn from: every frame, the velocity the
+	curve says it should have, plus a pull toward where the curve says it
+	should be.
+
+	Only the torso is steered, so the arms and legs still flail freely off it.
+
+	It lets go the moment the flight stops being free:
+	  * the curve reaches whatever the drawn line hit -- physics takes the
+	    impact from there, so landings are real, not scripted
+	  * the body is knocked off course by something the line didn't know
+	    about (a player walking into the path, a moving part) -- it's never
+	    dragged through anything
+	  * a few seconds pass, as a failsafe
+--]]
+local GUIDE_GAIN = 12         -- how hard it's pulled back onto the curve (per second)
+-- studs/s cap on that pull, so a big error can't yank it. Kept well under
+-- CreatureGrabServer's THROW_IMPACT_DROP (22): a correction must never look like
+-- the sudden stop the server reads as the body hitting something.
+local GUIDE_MAX_PULL = 12
+local GUIDE_BREAK = 30        -- studs/s of unexpected change = it hit something; let go
+local GUIDE_MAX_TIME = 4      -- seconds, failsafe
+
+local guideParams = RaycastParams.new()
+guideParams.FilterType = Enum.RaycastFilterType.Exclude
+guideParams.IgnoreWater = true
+
+local function guideFlight(victim: Model, origin: Vector3, v0: Vector3)
+	local ref = victim:FindFirstChild("HumanoidRootPart")
+	local steered = {}
+	for _, name in ipairs({ "HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso" }) do
+		local p = victim:FindFirstChild(name)
+		if p and p:IsA("BasePart") then
+			table.insert(steered, p)
+			ref = ref or p
+		end
 	end
+	if not (ref and ref:IsA("BasePart")) then
+		return
+	end
+
+	-- Same things the drawn line ignored, so it ends where the line ended.
+	local exclude = { victim }
+	if player.Character then
+		table.insert(exclude, player.Character)
+	end
+	if arcFolder then
+		table.insert(exclude, arcFolder)
+	end
+	guideParams.FilterDescendantsInstances = exclude
+
+	local g = Vector3.new(0, -workspace.Gravity, 0)
+	local start = os.clock()
+	local prevExpected = origin
+	local lastSet: Vector3? = nil
+	local lastT = 0
+
+	local conn
+	conn = RunService.Heartbeat:Connect(function()
+		local t = os.clock() - start
+		if not (victim.Parent and ref.Parent) or t > GUIDE_MAX_TIME then
+			conn:Disconnect()
+			return
+		end
+
+		local expected = origin + v0 * t + g * (0.5 * t * t)
+
+		-- The curve has reached what the line hit: the landing is physics' job.
+		if workspace:Raycast(prevExpected, expected - prevExpected, guideParams) then
+			conn:Disconnect()
+			return
+		end
+		prevExpected = expected
+
+		-- Knocked off course by something unexpected? Compare what it's doing now
+		-- with what we set last frame (plus that frame's gravity).
+		if lastSet then
+			local predicted = lastSet + g * (t - lastT)
+			if (ref.AssemblyLinearVelocity - predicted).Magnitude > GUIDE_BREAK then
+				conn:Disconnect()
+				return
+			end
+		end
+
+		local pull = (expected - ref.Position) * GUIDE_GAIN
+		if pull.Magnitude > GUIDE_MAX_PULL then
+			pull = pull.Unit * GUIDE_MAX_PULL
+		end
+		local v = v0 + g * t + pull
+		for _, p in ipairs(steered) do
+			if p.Parent and not p.Anchored then
+				p.AssemblyLinearVelocity = v
+			end
+		end
+		lastSet, lastT = v, t
+	end)
 end
 
 -- ============================================================
@@ -637,6 +719,12 @@ local function bindInput()
 			if st then
 				st.localThrowStart = stamp
 				st.localThrowCharge = charge
+				-- Where the drawn line started, right now. The body is launched from
+				-- HERE, not from where the server thinks we are a wind-up later --
+				-- that gap is what put the flight off the line.
+				local lineOrigin = cam and computeThrow(st, cam.CFrame.LookVector, charge)
+				st.localThrowOrigin = lineOrigin
+				st.localThrowOriginAt = os.clock()
 			end
 			return Enum.ContextActionResult.Sink
 		end
@@ -773,7 +861,20 @@ function System.init(ctx)
 
 			-- No CFrame = the corpse toss: it leaves from exactly where the hand has
 			-- it, rather than being moved to a launch point first.
-			if typeof(launchCFrame) == "CFrame" then
+			local isThrow = typeof(launchCFrame) == "CFrame"
+			if isThrow then
+				-- Launch from where the drawn line started (recorded at the click),
+				-- if we have it and it's fresh. The server's origin is a wind-up
+				-- late and a network delay behind, which is what put the flight
+				-- off the line. Its rotation is kept.
+				local st = char and rigs[char]
+				local lineOrigin = st and st.localThrowOrigin
+				if lineOrigin and os.clock() - (st.localThrowOriginAt or 0) < 3 then
+					launchCFrame = CFrame.new(lineOrigin) * launchCFrame.Rotation
+				end
+				if st then
+					st.localThrowOrigin = nil
+				end
 				victim:PivotTo(launchCFrame)
 			end
 			for _, part in ipairs(victim:GetDescendants()) do
@@ -783,6 +884,10 @@ function System.init(ctx)
 						part.AssemblyAngularVelocity = spin
 					end
 				end
+			end
+
+			if isThrow then
+				guideFlight(victim, launchCFrame.Position, velocity)
 			end
 		end)
 	end)
