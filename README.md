@@ -79,7 +79,7 @@ fixed Explorer location, so it has its own folder here.
 ## Assets
 
 `Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,
-`aurora_glow.png`, `aurora_ray.png`), `AuroraBuilder.luau` (run in Studio's
+`aurora_glow.png`, and `aurora_ray.png`, which is no longer used), `AuroraBuilder.luau` (run in Studio's
 Command Bar after uploading the textures), a `preview.png`, and the Python
 script that generated the textures.
 
