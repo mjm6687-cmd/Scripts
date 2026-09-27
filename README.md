@@ -1,10 +1,13 @@
 # Creature System (Roblox / Luau)
 
 Morphs a player into a creature with its own movement, roars, grab/throw/eat,
-head and arm aiming, vision modes, footsteps and breathing.
+head and arm aiming, vision modes, footsteps and breathing. The human side
+(the SPH gun framework, human movement and footsteps) is here too.
 
 Folders here mirror the Roblox Studio **Explorer**. Each `.luau` file is one
 script; copy its contents into a script of the listed type at that location.
+
+## Creature
 
 ```
 ReplicatedStorage
@@ -38,9 +41,25 @@ StarterPlayer
             ├── NightVision     ModuleScript
             ├── Roar            ModuleScript
             ├── RoarEffects     ModuleScript
-            ├── RoarWave        ModuleScript  (new: visible roar shockwave)
+            ├── RoarWave        ModuleScript  (visible roar shockwave)
             ├── Thermal         ModuleScript
             └── Vision          ModuleScript
+```
+
+## Human (SPH gun framework, movement, footsteps)
+
+```
+ServerScriptService
+└── SPH_Server                  Script
+
+StarterPlayer
+├── StarterPlayerScripts
+│   ├── PlayerClient            LocalScript
+│   └── Footsteps               LocalScript
+└── StarterCharacterScripts
+    └── SPH_Character           Folder
+        ├── CharacterClient     LocalScript
+        └── CharacterMovement   LocalScript
 ```
 
 Notes:
@@ -50,3 +69,8 @@ Notes:
   has a different name, the two rig scripts go inside that Model instead.
 - RemoteEvents (`CreatureRoarRemote`, `CreatureLookRemote`, etc.) are created
   at runtime by the server scripts; nothing to add by hand.
+- The human scripts depend on `ReplicatedStorage.SPH_Assets` (GameConfig,
+  modules, animations, sounds), which is not in this repo.
+- Two creature-side files share names with human-side ones: the creature's
+  `Systems/Footsteps` (ModuleScript) and the human `StarterPlayerScripts/Footsteps`
+  (LocalScript) are different scripts in different places.
