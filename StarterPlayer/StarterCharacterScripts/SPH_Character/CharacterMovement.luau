@@ -257,6 +257,47 @@ local WATER_REGEN_MULT = 0.3
 
 local stamina = MAX_STAMINA
 
+--[[
+	REGEN DELAY + RAMP.
+
+	Stamina used to start refilling the instant sprinting stopped, at three times
+	the drain rate -- so tapping Shift on and off was nearly free and there was
+	never a moment of being winded. Now:
+
+	  * after stamina is SPENT (sprinting or a jump) nothing refills for
+	    staminaRegenDelay seconds -- longer, staminaRegenDelayEmpty, if you ran it
+	    completely dry. That pause is what makes running out feel like something.
+	  * then it refills slowly and builds up to the full rate over
+	    staminaRegenRamp seconds, rather than snapping straight to max.
+
+	Kept in TUNE rather than as new top-level locals: this script sits close to
+	Luau's 200-local ceiling (see the note on TUNE above).
+--]]
+TUNE.staminaRegenDelay = 1.0       -- s after sprinting/jumping before regen starts
+TUNE.staminaRegenDelayEmpty = 2.0  -- s instead, if stamina hit zero
+TUNE.staminaRegenRamp = 1.0        -- s to build from a trickle up to the full regen rate
+TUNE.staminaLastUse = -math.huge   -- runtime: os.clock() stamina was last spent
+TUNE.staminaEmptied = false        -- runtime: last spend ran it dry
+
+-- Call whenever stamina is spent. Restarts the pause before it refills.
+function TUNE.markStaminaUse()
+	TUNE.staminaLastUse = os.clock()
+	TUNE.staminaEmptied = stamina <= 0
+end
+
+-- Stamina to add this frame at `rate` per second, after the pause and ramp.
+function TUNE.staminaRegenAmount(rate: number, dt: number): number
+	local delay = TUNE.staminaEmptied and TUNE.staminaRegenDelayEmpty or TUNE.staminaRegenDelay
+	local since = os.clock() - TUNE.staminaLastUse - delay
+	if since <= 0 then
+		return 0
+	end
+	-- 0 -> 1 across the ramp. Starts at 15% rather than 0 so the bar visibly
+	-- begins moving the moment the pause ends.
+	local ramp = math.clamp(since / math.max(TUNE.staminaRegenRamp, 0.01), 0.15, 1)
+	return rate * ramp * dt
+end
+
 -- =====================
 -- SPRINT DIRECTION LOCK
 -- =====================
@@ -840,6 +881,7 @@ local function DoJumpWindup()
 	-- Deduct stamina now that the jump fires
 	if not HasExoskeleton() then
 		stamina -= JUMP_COST
+		TUNE.markStaminaUse()
 		PushStaminaAttrs()
 	end
 
@@ -899,6 +941,7 @@ contextActionService:BindActionAtPriority("SPH_Jump", function(actionName, input
 				if (now - lastLandedTime) >= JUMP_LANDING_COOLDOWN and (exo or stamina >= JUMP_COST) then
 					if not exo then
 						stamina -= JUMP_COST
+						TUNE.markStaminaUse()
 						PushStaminaAttrs()
 					end
 					jumpOnCooldown = true
@@ -1697,12 +1740,12 @@ runService.RenderStepped:Connect(function(deltaTime)
 			STOP THE ANIMATIONS TOO, ONCE.
 
 			Returning early stops us DRIVING the character, but it also skips every
-			animation decision below — so whatever was playing when the grab landed
+			animation decision below ï¿½ so whatever was playing when the grab landed
 			just keeps looping. That's why a grabbed player hung from the creature's
 			hand with their legs still pumping through the walk cycle.
 
 			CreatureGrabServer plays a hold pose on the victim at Action4, which beats
-			these on any joint it keyframes — but only on the joints it keyframes. A
+			these on any joint it keyframes ï¿½ but only on the joints it keyframes. A
 			hold pose that doesn't touch the legs would still let the walk cycle show
 			through underneath, so the movement stack has to actually stop rather than
 			be painted over.
@@ -1816,7 +1859,7 @@ runService.RenderStepped:Connect(function(deltaTime)
 		if HasExoskeleton() then
 			stamina = MAX_STAMINA
 		else
-			stamina = math.min(stamina + REGEN_PER_SEC * WATER_REGEN_MULT * deltaTime, MAX_STAMINA)
+			stamina = math.min(stamina + TUNE.staminaRegenAmount(REGEN_PER_SEC * WATER_REGEN_MULT, deltaTime), MAX_STAMINA)
 		end
 		PushStaminaAttrs()
 		return
@@ -1968,8 +2011,10 @@ runService.RenderStepped:Connect(function(deltaTime)
 			playerCharacter:SetAttribute("Sprinting", false)
 			ToggleSprint(false)
 		end
+		TUNE.markStaminaUse()
 	else
-		stamina += regenRate * deltaTime
+		-- Waits out the pause after the last spend, then ramps up. See TUNE.
+		stamina += TUNE.staminaRegenAmount(regenRate, deltaTime)
 		if stamina > MAX_STAMINA then stamina = MAX_STAMINA end
 	end
 	PushStaminaAttrs()
