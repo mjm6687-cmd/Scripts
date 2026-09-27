@@ -51,7 +51,10 @@ col = mix(col, red, smoothstep(0.60, 0.95, hh))
 fringe = (h < 0)[..., None] * np.clip(-h / 0.02, 0, 1)[..., None]
 col = col * (1 - fringe * 0.6) + pink * fringe * 0.6
 rgba = np.dstack([np.clip(col, 0, 1), alpha[..., None]])
-Image.fromarray((rgba * 255).astype(np.uint8), "RGBA").save("aurora_curtain.png", optimize=True)
+# Beams run a texture's VERTICAL axis along their length, so the image is rotated:
+# the curtain's length runs down the image (tiling top-to-bottom) and its height
+# runs across it, with the bright lower edge on the LEFT.
+Image.fromarray((np.rot90(rgba, k=-1) * 255).astype(np.uint8), "RGBA").save("aurora_curtain.png", optimize=True)
 
 # ---- GLOW (soft haze, no rays) ----
 edge2 = 0.78 + 0.08*(tile_noise(W, 1, 3, 4) - 0.5)
@@ -63,7 +66,7 @@ a2 = np.clip(soft * 0.45, 0, 1)
 hh2 = np.clip(h2, 0, None) / 0.8
 col2 = mix(green, teal, smoothstep(0.1, 0.4, hh2))
 col2 = mix(col2, purple, smoothstep(0.4, 0.9, hh2))
-Image.fromarray((np.dstack([col2, a2[..., None]]) * 255).astype(np.uint8), "RGBA").save("aurora_glow.png", optimize=True)
+Image.fromarray((np.rot90(np.dstack([col2, a2[..., None]]), k=-1) * 255).astype(np.uint8), "RGBA").save("aurora_glow.png", optimize=True)
 
 # ---- RAY PARTICLE (one soft vertical streak, for the shimmer layer) ----
 PW, PH = 64, 512

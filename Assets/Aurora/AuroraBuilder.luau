@@ -19,9 +19,12 @@
 	the proper script later -- every tunable is up here so you can shape it first.
 ]]
 
+-- The curtain and glow textures are TALL (512x1024): a Beam runs a texture's
+-- vertical axis along its length, so the curtain's length runs down the image.
+-- (The first upload was wide, which put the rays sideways -- re-upload these two.)
 local TEXTURES = {
-	curtain = "rbxassetid://92716280606048", -- aurora_curtain.png
-	glow    = "rbxassetid://131041612949925", -- aurora_glow.png
+	curtain = "rbxassetid://0", -- aurora_curtain.png  (re-upload: the new, tall one)
+	glow    = "rbxassetid://0", -- aurora_glow.png     (re-upload: the new, tall one)
 	ray     = "rbxassetid://100799507043869", -- aurora_ray.png
 }
 
