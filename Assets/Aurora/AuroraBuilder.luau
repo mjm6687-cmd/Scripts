@@ -62,7 +62,7 @@ local SHIMMER_SIZE = 140           -- studs; squashed into a tall thin streak
 	  * bright edge at the TOP instead of the bottom      -> FLIP_VERTICAL = true
 --]]
 local WIDTH_ALONG_Z = false
-local FLIP_VERTICAL = false
+local FLIP_VERTICAL = true  -- true is correct in Studio: the bright edge lands at the bottom
 
 -------------------------------------------------------------------------------
 
