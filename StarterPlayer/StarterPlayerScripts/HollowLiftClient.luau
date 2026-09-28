@@ -69,6 +69,9 @@ local SOUNDS = {
 }
 local SOUND = {
 	hearDistance = 80,        -- sounds start/stop within this range of the camera
+	-- The hum/surge and the air play from invisible boxes this size, so with
+	-- volumetric audio they come from the whole space, not a single point.
+	volumeSize = Vector3.new(30, 30, 30),
 	humVolume = 0.6,
 	airVolume = 0.35,
 	surgeVolume = 0.8,
@@ -297,13 +300,25 @@ local function newSound(parent, id, volume, maxDist, looped)
 	return s
 end
 
--- A local attachment in Terrain to play a sound from a point in space.
-local function anchorAt(pos: Vector3)
-	local a = Instance.new("Attachment")
-	a.Name = "HollowLiftSound"
-	a.WorldPosition = pos
-	a.Parent = workspace.Terrain
-	return a
+-- Invisible local box for a sound to play from (volumetric audio uses the
+-- part's whole volume). Kept in a local folder, never replicated.
+local soundFolder = Instance.new("Folder")
+soundFolder.Name = "HollowLiftSoundVolumes"
+soundFolder.Parent = workspace
+
+local function volumeAt(name: string, pos: Vector3)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = SOUND.volumeSize
+	p.CFrame = CFrame.new(pos)
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Transparency = 1
+	p.Parent = soundFolder
+	return p
 end
 
 local function floorOf(entry): Vector3
@@ -317,13 +332,14 @@ end
 
 local function startSounds(entry)
 	entry.sounding = true
-	entry.orbAnchor = anchorAt(entry.centre)
+	entry.orbAnchor = volumeAt("HumVolume", entry.centre)
 	if has(SOUNDS.Hum) then
 		entry.hum = newSound(entry.orbAnchor, SOUNDS.Hum, SOUND.humVolume, 70, true)
 		entry.hum:Play()
 	end
 	if has(SOUNDS.Air) then
-		entry.airAnchor = anchorAt(floorOf(entry))
+		-- sits on the crater floor and rises up through the dust column
+		entry.airAnchor = volumeAt("AirVolume", floorOf(entry) + Vector3.new(0, SOUND.volumeSize.Y / 2, 0))
 		entry.air = newSound(entry.airAnchor, SOUNDS.Air, SOUND.airVolume, 45, true)
 		entry.air:Play()
 	end
