@@ -28,6 +28,7 @@ ServerScriptService
 
 StarterPlayer
 └── StarterPlayerScripts
+    ├── GrabbedInventoryLock    LocalScript (hides the hotbar while grabbed/thrown)
     └── CreatureClient          LocalScript
         └── Systems             Folder (child of the CreatureClient LocalScript)
             ├── Arm             ModuleScript

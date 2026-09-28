@@ -1048,8 +1048,8 @@ local function doGrab(player: Player?, rig: Model)
 
 		Whatever they were holding goes back to their Backpack (never destroyed, so
 		nothing is lost if they're dropped), and anything they try to equip while held
-		is sent straight back. Their client (SPH CharacterClient) hides the inventory
-		bar and stops trying to equip too, but that's only the UI: this is the part
+		is sent straight back. Their client hides the inventory bar too
+		(GrabbedInventoryLock) and SPH CharacterClient stops trying to equip, but that's only the UI: this is the part
 		that actually stops a gun being fired from inside the creature's fist.
 
 		Players only. An NPC dummy has no Backpack to put things in.

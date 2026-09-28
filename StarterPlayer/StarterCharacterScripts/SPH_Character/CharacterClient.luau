@@ -18,7 +18,6 @@ svc.tweenService = game:GetService("TweenService")
 svc.testService = game:GetService("TestService")
 svc.contextActionService = game:GetService("ContextActionService")
 svc.collectionService = game:GetService("CollectionService")
-svc.starterGui = game:GetService("StarterGui")
 
 local assets = svc.replicatedStorage.SPH_Assets
 local modules = assets.Modules
@@ -3067,10 +3066,11 @@ character.ChildAdded:Connect(function(newChild)
 		end)
 		return
 	end
-	-- Held by a creature: same bounce. Skipping the equip entirely (rather than
-	-- starting it and having the server yank the tool away) is what stops the gun
-	-- flickering in and out, and the arms snapping into the gun pose, in the hand.
-	if newChild:FindFirstChild("SPH_Weapon") and character:GetAttribute("Grabbed") == true then
+	-- Held (or mid-throw) by a creature: same bounce. Skipping the equip entirely
+	-- (rather than starting it and having the server yank the tool away) is what
+	-- stops the gun flickering in and out, and the arms snapping into the gun pose.
+	if newChild:FindFirstChild("SPH_Weapon")
+		and (character:GetAttribute("Grabbed") == true or character:GetAttribute("Thrown") == true) then
 		task.defer(function()
 			if newChild.Parent == character then
 				humanoid:UnequipTools()
@@ -3301,13 +3301,13 @@ character.ChildRemoved:Connect(function(oldChild)
 			-- straight back so the equip finishes. Only genuinely let it go if we're dying
 			-- or being seated in a vehicle (cases where the gun must come off regardless).
 			if flags.dead or flags.vehicleSeated or springs.swimming or humanoid.Sit
-				or character:GetAttribute("Grabbed") == true then
+				or character:GetAttribute("Grabbed") == true or character:GetAttribute("Thrown") == true then
 				flags.equipping = false
 				Unequip(oldChild)
 			else
 				task.defer(function()
 					if not flags.dead and not flags.vehicleSeated and not springs.swimming and not humanoid.Sit
-						and character:GetAttribute("Grabbed") ~= true
+						and character:GetAttribute("Grabbed") ~= true and character:GetAttribute("Thrown") ~= true
 						and oldChild.Parent ~= character and oldChild:IsDescendantOf(game) then
 						humanoid:EquipTool(oldChild)
 					end
@@ -4162,47 +4162,14 @@ character:GetAttributeChangedSignal("Swimming"):Connect(function()
 	end
 end)
 
---[[
-	GRABBED BY A CREATURE: hide the hotbar while held.
-
-	CreatureGrabServer takes the gun off and bounces any re-equip, and the
-	ChildAdded bounce above stops us even starting one -- this is just so the
-	bar isn't sitting there promising weapons you can't use.
-
-	Shown again on release. Also shown once whenever this script starts (every
-	spawn): SetCoreGuiEnabled belongs to the PLAYER, not the character, so dying
-	in the creature's hand used to leave the hotbar hidden for the next life.
-	Creatures never run this script (CreatureService strips it), so this can't
-	un-hide the creature's own hidden inventory.
-
-	Retried because SetCoreGuiEnabled throws if CoreGui isn't ready yet.
---]]
-do
-	local function setBackpack(enabled: boolean)
-		task.spawn(function()
-			for _ = 1, 10 do
-				if pcall(svc.starterGui.SetCoreGuiEnabled, svc.starterGui, Enum.CoreGuiType.Backpack, enabled) then
-					return
-				end
-				task.wait(0.1)
-			end
-		end)
+-- Grabbed by a creature: take the gun off straight away rather than waiting for
+-- the server's unequip to replicate. Hiding the hotbar is GrabbedInventoryLock's
+-- job (StarterPlayerScripts), not this script's.
+character:GetAttributeChangedSignal("Grabbed"):Connect(function()
+	if character:GetAttribute("Grabbed") == true and character:FindFirstChildWhichIsA("Tool") then
+		humanoid:UnequipTools()
 	end
-
-	local wasGrabbed = nil -- nil so the first call always sets the bar (see above)
-	local function onGrabbedChanged()
-		local grabbed = character:GetAttribute("Grabbed") == true
-		if grabbed == wasGrabbed then return end
-		wasGrabbed = grabbed
-		setBackpack(not grabbed)
-		if grabbed and character:FindFirstChildWhichIsA("Tool") then
-			humanoid:UnequipTools() -- the server does too; this is just quicker
-		end
-	end
-
-	character:GetAttributeChangedSignal("Grabbed"):Connect(onGrabbedChanged)
-	onGrabbedChanged()
-end
+end)
 
 humanoid.Seated:Connect(function(seated, seatPart)
 	if seated then
