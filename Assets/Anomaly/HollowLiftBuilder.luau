@@ -33,11 +33,11 @@ local TEXTURES = {
 	Leaf = "rbxassetid://91534275918577", -- leaf.png
 	Ring = "rbxassetid://85522458077339", -- ring.png
 	-- the orb
-	Glow = "",     -- glow.png     (bright core, and the dark heart)
-	LensRim = "",  -- lensrim.png  (the bent-light halo)
-	Streak = "",   -- streak.png   (inflow streaks)
-	Spark = "",    -- spark.png    (twinkles)
-	Wisp = "",     -- wisp.png     (orbit trails)
+	Glow = "rbxassetid://84812883750380",     -- glow.png     (bright core, and the dark heart)
+	LensRim = "rbxassetid://131042844491629",  -- lensrim.png  (the bent-light halo)
+	Streak = "rbxassetid://78221922232232",   -- streak.png   (inflow streaks)
+	Spark = "rbxassetid://123217368876639",    -- spark.png    (twinkles)
+	Wisp = "rbxassetid://82090755078513",     -- wisp.png     (orbit trails)
 }
 
 local ROCK_MESHES = {
