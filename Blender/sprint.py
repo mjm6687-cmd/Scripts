@@ -40,7 +40,7 @@ def S(x, y, z):
 
 # Leg reach limit (studs). Feet are pulled in so the IK never over-stretches.
 LEG = 2.0
-REACH = 0.9 * LEG
+REACH = 1.05 * LEG  # a touch over LEG: a planted leg reads as straight, not broken
 
 
 def foot(hip, y, z):
