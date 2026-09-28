@@ -290,11 +290,11 @@ do
 				-- Local +X runs along the wall, +Z points into the base.
 				local cf = CFrame.fromMatrix(pos, dir, Vector3.yAxis)
 				local w = step - 0.3
-				mk(walls, "TWall", cf * CFrame.new(0, WALL_H / 2, 0), Vector3.new(w, WALL_H, 1.6), "wall")
-				mk(walls, "TWallBase", cf * CFrame.new(0, 1, 0), Vector3.new(w, 2, 6), "wall")
-				mk(walls, "TWallCap", cf * CFrame.new(0, WALL_H - 0.4, 0), Vector3.new(w, 0.8, 2.2), "wall")
+				mk(walls, "Part", "TWall", cf * CFrame.new(0, WALL_H / 2, 0), Vector3.new(w, WALL_H, 1.6), "wall")
+				mk(walls, "Part", "TWallBase", cf * CFrame.new(0, 1, 0), Vector3.new(w, 2, 6), "wall")
+				mk(walls, "Part", "TWallCap", cf * CFrame.new(0, WALL_H - 0.4, 0), Vector3.new(w, 0.8, 2.2), "wall")
 				if n % 9 == 0 then
-					local lamp = mk(walls, "WallLamp", cf * CFrame.new(0, WALL_H - 3, 1.3), Vector3.new(1.6, 0.6, 1), "lampW")
+					local lamp = mk(walls, "Part", "WallLamp", cf * CFrame.new(0, WALL_H - 3, 1.3), Vector3.new(1.6, 0.6, 1), "lampW")
 					addLight(lamp, "SpotLight", { Face = Enum.NormalId.Back, Range = 32, Angle = 110, Brightness = 1.6,
 						Color = MAT.lampW[3] })
 				end
