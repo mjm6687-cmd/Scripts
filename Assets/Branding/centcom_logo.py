@@ -86,7 +86,7 @@ def arc_text(text, radius, top=True, tracking=0.55):
 arc_text("CENTRAL COMMAND", 435 * k, top=True, tracking=0.62)
 arc_text("PROJECT NORTHGATE", 435 * k, top=False, tracking=0.5)
 
-# centre: radar display with a star
+# centre: radar display
 R = 250 * k
 for rr in (R, R * 0.68, R * 0.36):
     ring(rr, int(4 * k), LIGHT)
@@ -103,19 +103,6 @@ for i in range(40):
 img.alpha_composite(sweep)
 la = math.radians(lead)
 d.line((C, C, C + math.cos(la) * R, C + math.sin(la) * R), fill=LIGHT, width=int(6 * k))
-# contacts
-for bx, by, br in [(0.46, -0.52, 9), (-0.55, 0.28, 7), (0.2, 0.62, 6), (0.7, -0.15, 8)]:
-    d.ellipse((C + bx * R - br * k, C + by * R - br * k, C + bx * R + br * k, C + by * R + br * k), fill=LIGHT)
-# star, with a dark keyline so it sits on the grid
-def star(cx, cy, r_out, r_in, col):
-    pts = []
-    for i in range(10):
-        a = -math.pi / 2 + i * math.pi / 5
-        r = r_out if i % 2 == 0 else r_in
-        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
-    d.polygon(pts, fill=col)
-star(C, C, 118 * k, 47 * k, DARK)
-star(C, C, 100 * k, 40 * k, LIGHT)
 # triangle marker above, like the Northgate seal
 tx, ty, tr = C, C - 292 * k, 44 * k
 outer = [(tx, ty - tr), (tx + tr * 1.1, ty + tr * 0.75), (tx - tr * 1.1, ty + tr * 0.75)]
