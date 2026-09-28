@@ -916,6 +916,10 @@ switchWeapon:Connect(function(player:Player, tool:Tool)
 			curWeapon:Destroy()
 		end
 
+		-- Held by a creature: CreatureGrabServer bounces the tool back to the Backpack,
+		-- but this request can land first and weld the arms back onto the rig.
+		if player.Character:GetAttribute("Grabbed") == true then return end
+
 		if player.Character.Humanoid.Health > 0 and tool and typeof(tool) == "Instance" then
 			torso["Left Shoulder"].Enabled = false
 			torso["Right Shoulder"].Enabled = false

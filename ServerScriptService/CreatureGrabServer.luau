@@ -883,6 +883,52 @@ local function gripC0(arm: BasePart): CFrame
 	return GRAB_HOLD_OFFSET
 end
 
+--[[
+	PUT THE GUN RIG'S ARMS AWAY.
+
+	SPH holds a gun with a hidden "WeaponRig" inside the character: its arms play
+	the gun animations, and two welds (law / raw) pin the REAL arms onto them
+	while the real shoulder motors are switched off. Normally the victim's own
+	client undoes that when the gun comes off -- but only after its unequip
+	animation, and only if it doesn't fight the unequip. Grabbed, that went wrong
+	and the arms stayed welded to the rig in the gun-holding pose, sticking out
+	stiff while the rest of the body dangled.
+
+	So the server does it on the spot: gun model gone, both welds off, shoulders
+	back on. Runs BEFORE the ragdoll, which then switches the shoulders off
+	itself and gets arms that are free to swing. The tool is untouched (it's
+	already in the Backpack); SPH_Server rebuilds all this on the next equip.
+--]]
+local function stowWeaponRig(victim: Model)
+	local weaponRig = victim:FindFirstChild("WeaponRig")
+	if not weaponRig then
+		return
+	end
+	local weapon = weaponRig:FindFirstChild("Weapon")
+	if weapon then
+		for _, child in ipairs(weapon:GetChildren()) do
+			if child:IsA("Model") then
+				child:Destroy()
+			end
+		end
+	end
+	for _, name in ipairs({ "law", "raw" }) do
+		local w = weaponRig:FindFirstChild(name)
+		if w and w:IsA("JointInstance") then
+			w.Enabled = false
+		end
+	end
+	local torso = victim:FindFirstChild("Torso") or victim:FindFirstChild("UpperTorso")
+	if torso then
+		for _, name in ipairs({ "Left Shoulder", "Right Shoulder" }) do
+			local m = torso:FindFirstChild(name)
+			if m and m:IsA("Motor6D") then
+				m.Enabled = true
+			end
+		end
+	end
+end
+
 local function doGrab(player: Player?, rig: Model)
 	if grabs[rig] then
 		return
@@ -1002,9 +1048,9 @@ local function doGrab(player: Player?, rig: Model)
 
 		Whatever they were holding goes back to their Backpack (never destroyed, so
 		nothing is lost if they're dropped), and anything they try to equip while held
-		is sent straight back. Their client hides the inventory bar too
-		(GrabbedInventoryLock), but that's only the UI: this is the part that actually
-		stops a gun being fired from inside the creature's fist.
+		is sent straight back. Their client (SPH CharacterClient) hides the inventory
+		bar and stops trying to equip too, but that's only the UI: this is the part
+		that actually stops a gun being fired from inside the creature's fist.
 
 		Players only. An NPC dummy has no Backpack to put things in.
 	--]]
@@ -1012,6 +1058,7 @@ local function doGrab(player: Player?, rig: Model)
 	local victimPlayer = Players:GetPlayerFromCharacter(victim)
 	if victimPlayer then
 		victimHum:UnequipTools()
+		stowWeaponRig(victim)
 		toolBlock = victim.ChildAdded:Connect(function(child)
 			if not child:IsA("Tool") then
 				return
