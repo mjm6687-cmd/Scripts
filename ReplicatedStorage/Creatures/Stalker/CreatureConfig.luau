@@ -43,7 +43,7 @@ return {
 	-- =====================
 	-- SPEED
 	-- =====================
-	walkSpeed = 9,             -- normal movement speed (WalkForward etc.)
+	walkSpeed = 8,             -- normal movement speed (WalkForward etc.). Was 9
 	accelWalk = 20,            -- studs/s^2 ramp up   (lower = heavier wind-up)
 	decelWalk = 26,            -- studs/s^2 ramp down (lower = longer coast)
 	speedSnapThreshold = 0.5,  -- below this while stopping, snap to 0
@@ -79,7 +79,7 @@ return {
 	-- that gap is what the weight is made of.
 	sprintSpeed = 21,  -- was 27 (26, 19, briefly 35)
 
-	accelSprint = 13,   -- was 9. Walk (9) to sprint (21) in roughly 0.9s
+	accelSprint = 13,   -- was 9. Walk (8) to sprint (21) in roughly 1s
 	-- a visible wind-up instead of an instant snap.
 	decelSprint = 18,   -- was 14
 	-- and you can't just stop. Also applies while slowing
