@@ -82,19 +82,19 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # The forward arm swings in across the chest and turns inward; the back arm
 # stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
-    hip=(-0.06, -0.05, -0.18), hips=(14, 10, 1), chest=(2, -14),
+    hip=(-0.06, -0.05, -0.18), hips=(22, 10, 1), chest=(4, -14),
     arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.2, 0), lfoot=(1.05, 0.5))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
-    hip=(-0.12, 0, -0.32), hips=(18, 7, -5), chest=(6, -10),
+    hip=(-0.12, 0, -0.32), hips=(26, 7, -5), chest=(8, -10),
     arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.6, 0), lfoot=(0.55, 0.95))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
-    hip=(-0.08, -0.05, -0.2), hips=(15, 0, -3), chest=(3, 0),
+    hip=(-0.08, -0.05, -0.2), hips=(23, 0, -3), chest=(5, 0),
     arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.2, 0), lfoot=(-0.45, 1.05))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
-    hip=(-0.03, -0.08, -0.05), hips=(13, -8, 0), chest=(2, 12),
+    hip=(-0.03, -0.08, -0.05), hips=(21, -8, 0), chest=(4, 12),
     arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.1, 0.25), lfoot=(-1.15, 0.5))
 
 
