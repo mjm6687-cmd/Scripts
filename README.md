@@ -140,11 +140,11 @@ MaterialService.
 
 ## Hollow Lift (gravity anomaly set piece)
 
-`Assets/Anomaly/HollowLiftBuilder.luau` is a **Command Bar** script: point the camera
-at the ground and run it to place the passive gravity anomaly (crater, cracks,
-ForceField lens, floating rocks, peeled slabs, bent tree, rising dust) as
-`Workspace > HollowLift`. `VARIANT` = `Dry` / `Wet` / `Deep`. It carves the crater
-into Terrain when you're on terrain.
+`Assets/Anomaly/HollowLiftBuilder.luau` is a **Command Bar** script: sculpt the crater
+in Terrain yourself, point the camera at its middle and run it to place the passive
+gravity anomaly (ForceField lens, floating rocks and peeled slabs from your rock
+meshes, rising dust/grit/leaves) as `Workspace > HollowLift`. `VARIANT` = `Dry` /
+`Wet` / `Deep`. Rock mesh ids are in `ROCK_MESHES`; it doesn't touch Terrain.
 
 Particle textures are in `Assets/Anomaly/` (`dust.png`, `grit.png`, `leaf.png`,
 `ring.png`, made by `generate_textures.py`). Upload them to Roblox and paste the ids
