@@ -6,6 +6,7 @@
 #   Fall        (loop, 0.8 s)  - airborne: legs hanging, arms out for balance
 #   Land        (0.6 s)        - heavy impact: deep knee bend, body crunches, recovers to the idle stance
 #   Turn_Left / Turn_Right (loop, 1.2 s) - heavy shuffle steps for turning on the spot
+#   Crouch_Turn_Left / Crouch_Turn_Right (loop, 1.2 s) - the same, low in the crouch with shorter lifts
 # Arms are FK (rotated), legs are IK (foot targets moved).
 import bpy
 import math
@@ -162,8 +163,10 @@ def turn_feet(angle_r, angle_l, lift_r, lift_l):
     return dict(rfoot=spot(-(0.5 + STANCE), angle_r, lift_r), lfoot=spot(0.5 + STANCE, angle_l, lift_l))
 
 
-def turn_keys(direction):
-    """direction: +1 = turn left, -1 = turn right. The foot on the turning side steps first."""
+def turn_keys(direction, base=None, lift=0.35):
+    """direction: +1 = turn left, -1 = turn right. The foot on the turning side steps first.
+    base: pose to turn in (default = idle stance, CROUCH = crouched). lift: how high feet step."""
+    base = dict(base or dict(hip=(0, 0, -0.2)))
     half = TURN_STEP / 2 * direction
     keys = []
     for i in range(13):
@@ -174,7 +177,7 @@ def turn_keys(direction):
         def angle(swinging, start, length, phase):
             if swinging:
                 k = (t - start) / length
-                return -half + 2 * half * k, 0.35 * math.sin(math.pi * k)
+                return -half + 2 * half * k, lift * math.sin(math.pi * k)
             return half - 2 * half * phase, 0.0         # planted: slide back against the turn
 
         lead = angle(lead_swing, 0.0, 0.4, (t - 0.4) / 0.6 if t >= 0.4 else 0)
@@ -185,9 +188,11 @@ def turn_keys(direction):
             feet = turn_feet(trail[0], lead[0], trail[1], lead[1])
         else:
             feet = turn_feet(lead[0], trail[0], lead[1], trail[1])
-        dip = -0.2 - 0.06 * (math.sin(2 * math.pi * t * 2) ** 2)   # small bob on each plant
-        keys.append((t * 1.2, P(hip=(0, 0, dip), twist=6 * direction, chest_twist=4 * direction,
-                                 head_yaw=10 * direction, **feet)))
+        kw = dict(base)
+        x, y, z = kw["hip"]
+        kw["hip"] = (x, y, z - 0.06 * (math.sin(2 * math.pi * t * 2) ** 2))   # small bob on each plant
+        kw.update(twist=6 * direction, chest_twist=4 * direction, head_yaw=10 * direction, **feet)
+        keys.append((t * 1.2, P(**kw)))
     return keys
 
 
@@ -199,6 +204,8 @@ ACTIONS = {
     "Land":        (LAND, False, {"Head": 0.03, "RightArm_FK": 0.04, "LeftArm_FK": 0.04}),
     "Turn_Left":   (turn_keys(1), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
     "Turn_Right":  (turn_keys(-1), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
+    "Crouch_Turn_Left":  (turn_keys(1, CROUCH, lift=0.25), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
+    "Crouch_Turn_Right": (turn_keys(-1, CROUCH, lift=0.25), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
 }
 
 
