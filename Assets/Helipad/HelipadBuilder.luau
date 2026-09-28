@@ -10,11 +10,20 @@
 	amber dash ring, touchdown circle, aiming marks, H), tie-down points and
 	neon edge lights set into the surface, each with a PointLight.
 
+	FLUSH LINES: the markings are cut into the surface with CSG (SubtractAsync)
+	and sit in the grooves, so their tops are exactly level with the green -- no
+	raised edges, no flicker. Then all the white lines are unioned into one
+	part and the amber dashes into another. If Studio's CSG fails for any
+	reason, it warns in Output and falls back to separate, slightly raised
+	lines. Turn either step off below.
+
 	PAD sets the size; every marking scales with it. Line widths are separate
 	and stay the same whatever the size.
 ]]
 
 local USE_CAMERA = true               -- false = build at ORIGIN instead
+local FLUSH_LINES = true              -- cut the lines into the surface (level with it)
+local UNION_LINES = true              -- merge the white lines into one union, amber into another
 local ORIGIN = Vector3.new(0, 0, 0)
 
 local PAD = 60                        -- painted square, studs across
@@ -60,7 +69,10 @@ local H = PAD / 2                     -- half of the green
 local K = H / 30                      -- scale for marking positions (1 at PAD 60)
 local C = K * CIRCLE_SCALE            -- scale for the middle group
 local SURF = 0.1                      -- top of the green (it's a plate this thick)
-local LINE = SURF + 0.02              -- top of the paint
+local PAINT_DEPTH = 0.02              -- how deep the lines are set into the surface
+local PAINT_TOP = SURF                -- lines finish exactly level with the green
+local PAINT_BOT = SURF - PAINT_DEPTH
+local PAINT_PARTS = {}                -- every line part, for the CSG steps
 
 -------------------------------------------------------------------------------
 
@@ -98,6 +110,7 @@ local function part(parent, name, cf, size, mat)
 		p.CanQuery = false
 		p.CanTouch = false
 		p.CastShadow = false
+		table.insert(PAINT_PARTS, p)
 	end
 	p.TopSurface = Enum.SurfaceType.Smooth
 	p.BottomSurface = Enum.SurfaceType.Smooth
@@ -119,9 +132,9 @@ end
 
 -- Painted strip from (x0, z0) to (x1, z1).
 local function stripe(parent, name, x0, z0, x1, z1, w, mat)
-	local y = (SURF + LINE) / 2
+	local y = (PAINT_BOT + PAINT_TOP) / 2
 	local a, b = Vector3.new(x0, y, z0), Vector3.new(x1, y, z1)
-	return part(parent, name, CFrame.lookAt((a + b) / 2, b), Vector3.new(w, LINE - SURF, (b - a).Magnitude), mat or "white")
+	return part(parent, name, CFrame.lookAt((a + b) / 2, b), Vector3.new(w, PAINT_TOP - PAINT_BOT, (b - a).Magnitude), mat or "white")
 end
 
 -- Painted ring of n segments; keep(i) picks which are drawn (dashes), fill is
@@ -131,8 +144,8 @@ local function ring(parent, name, r, n, w, mat, keep, fill)
 	for i = 0, n - 1 do
 		if not keep or keep(i) then
 			local a = (i + 0.5) / n * 2 * math.pi
-			part(parent, name, CFrame.new(math.cos(a) * r, (SURF + LINE) / 2, math.sin(a) * r) * CFrame.Angles(0, -a, 0),
-				Vector3.new(w, LINE - SURF, keep and seg * (fill or 0.6) or seg + 0.03), mat)
+			part(parent, name, CFrame.new(math.cos(a) * r, (PAINT_BOT + PAINT_TOP) / 2, math.sin(a) * r) * CFrame.Angles(0, -a, 0),
+				Vector3.new(w, PAINT_TOP - PAINT_BOT, keep and seg * (fill or 0.6) or seg + 0.03), mat)
 		end
 	end
 end
@@ -207,8 +220,8 @@ ring(paint, "TouchdownCircle", 14 * C, 96, W_TOUCHDOWN, "white")
 for i = 0, 7 do
 	local a = i * math.pi / 4
 	local r = 18.5 * C
-	part(paint, "AimingMark", CFrame.new(math.cos(a) * r, (SURF + LINE) / 2, math.sin(a) * r) * CFrame.Angles(0, -a, 0),
-		Vector3.new(W_AIM, LINE - SURF, 3 * C), "white")
+	part(paint, "AimingMark", CFrame.new(math.cos(a) * r, (PAINT_BOT + PAINT_TOP) / 2, math.sin(a) * r) * CFrame.Angles(0, -a, 0),
+		Vector3.new(W_AIM, PAINT_TOP - PAINT_BOT, 3 * C), "white")
 end
 
 -- H.
@@ -250,6 +263,82 @@ end
 pad.PrimaryPart = surface
 pad.WorldPivot = ORIGIN_CF
 pad.Parent = workspace
+
+-- CSG: cut the grooves, then merge the lines. Parts must be in Workspace first.
+local function finishUnion(u, name, parent, paintLike)
+	u.Name = name
+	u.Anchored = true
+	u.UsePartColor = true
+	u.CollisionFidelity = Enum.CollisionFidelity.Box
+	u.RenderFidelity = Enum.RenderFidelity.Precise
+	if paintLike then
+		u.CanCollide = false
+		u.CanQuery = false
+		u.CanTouch = false
+		u.CastShadow = false
+	end
+	u.Parent = parent
+	return u
+end
+
+local flushed = false
+if FLUSH_LINES then
+	local tools = {}
+	for _, p in ipairs(PAINT_PARTS) do
+		-- The cutter pokes 0.1 above the surface so the cut goes cleanly
+		-- through the top face rather than stopping exactly on it.
+		local t = p:Clone()
+		t.Size += Vector3.new(0, 0.1, 0)
+		t.CFrame += ORIGIN_CF.UpVector * 0.05
+		t.Parent = paint
+		table.insert(tools, t)
+	end
+	local ok, result = pcall(function()
+		return surface:SubtractAsync(tools)
+	end)
+	for _, t in ipairs(tools) do
+		t:Destroy()
+	end
+	if ok and result then
+		finishUnion(result, "Surface", paint, false)
+		surface:Destroy()
+		surface = result
+		pad.PrimaryPart = surface
+		flushed = true
+	else
+		warn("[Helipad] Couldn't cut the lines into the surface (" .. tostring(result)
+			.. "), so they sit slightly raised instead.")
+	end
+end
+if not flushed then
+	for _, p in ipairs(PAINT_PARTS) do
+		p.CFrame = p.CFrame + (ORIGIN_CF.UpVector * PAINT_DEPTH)
+	end
+end
+
+if UNION_LINES then
+	local byMat = {}
+	for _, p in ipairs(PAINT_PARTS) do
+		local key = p.Color == MAT.amber[3] and "amber" or "white"
+		byMat[key] = byMat[key] or {}
+		table.insert(byMat[key], p)
+	end
+	for key, list in pairs(byMat) do
+		local first = table.remove(list, 1)
+		local ok, result = pcall(function()
+			return first:UnionAsync(list)
+		end)
+		if ok and result then
+			finishUnion(result, key == "amber" and "AmberLines" or "Lines", paint, true)
+			first:Destroy()
+			for _, p in ipairs(list) do
+				p:Destroy()
+			end
+		else
+			warn("[Helipad] Couldn't union the " .. key .. " lines (" .. tostring(result) .. "); left as separate parts.")
+		end
+	end
+end
 
 if recording then
 	pcall(function()
