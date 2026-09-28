@@ -54,11 +54,18 @@ local LIGHT = {
 -- Sound ids ("rbxassetid://..."); upload the files in Assets/Anomaly/sounds.
 -- Blank ones are skipped.
 local SOUNDS = {
-	Hum = "",                -- hum_loop.ogg
-	Air = "",                -- air_loop.ogg
-	Surge = "",              -- surge.ogg
-	Creaks = { "", "", "" }, -- rock_creak_1/2/3.ogg
-	Clacks = { "", "" },     -- pebble_clack_1/2.ogg
+	Hum = "rbxassetid://105462376919787",   -- hum_loop.ogg
+	Air = "rbxassetid://115079028336662",   -- air_loop.ogg
+	Surge = "rbxassetid://74739307029789",  -- surge.ogg
+	Creaks = {                              -- rock_creak_1/2/3.ogg
+		"rbxassetid://136679394687918",
+		"rbxassetid://108481723739562",
+		"rbxassetid://109318720231870",
+	},
+	Clacks = {                              -- pebble_clack_1/2.ogg
+		"rbxassetid://71285117002124",
+		"rbxassetid://119770884121560",
+	},
 }
 local SOUND = {
 	hearDistance = 80,        -- sounds start/stop within this range of the camera
