@@ -1,7 +1,7 @@
 # Pounce animation set for the R6 IK/FK Blender rig (v2.22).
 # Run in Blender: Scripting tab > New/Open > Run Script.
-# Creates 3 in-place actions on __PrimaryArmature that chain together:
-#   Pounce_Crouch - sink down and hold (wind-up)
+# Creates 3 in-place, all-fours actions on __PrimaryArmature that chain together:
+#   Pounce_Crouch - from an all-fours stance, sink down and hold (wind-up)
 #   Pounce_Start  - explosive push-off
 #   Pounce_Lunge  - stretched out mid-air, holds at the end
 # Arms are FK (rotated), legs are IK (foot targets moved).
@@ -35,44 +35,56 @@ def S(x, y, z):
 
 
 # Each pose: bone -> (rotations [(axis, degrees)], location offset in studs or None)
+# Quadruped (all fours). R6 arms can't bend, so the chest height is set by
+# how far forward/back the arms angle. Arm angle on screen = torso lean + arm pitch
+# (0 = straight down, negative = hands forward of the shoulders).
 REST = {}
 
+ALL_FOURS = {
+    HIP_BONE:      ([], S(0, 0, -1.35)),                  # body low enough for hands to reach the floor
+    "Torso_FK":    ([(PITCH, 80)], None),                 # back nearly flat
+    "Head":        ([(PITCH, -75)], None),                # face forward
+    "RightArm_FK": ([(PITCH, -80), (ROLL, 5)], None),     # front legs straight down
+    "LeftArm_FK":  ([(PITCH, -80), (ROLL, -5)], None),
+    "RightLeg-IK": ([], S(0, 0.6, 0)),                    # back legs under the hips
+    "LeftLeg-IK":  ([], S(0, 0.9, 0)),
+}
+
 CROUCH = {
-    HIP_BONE:      ([], S(0, 0.2, -0.7)),                 # drop and sit back
-    "Torso_FK":    ([(PITCH, 35)], None),                 # lean in
-    "Head":        ([(PITCH, -30)], None),                # eyes stay on the target
-    "RightArm_FK": ([(PITCH, 30), (ROLL, 10)], None),     # arms swept back, loaded
-    "LeftArm_FK":  ([(PITCH, 30), (ROLL, -10)], None),
-    "RightLeg-IK": ([], S(0, -0.5, 0)),                   # front foot
-    "LeftLeg-IK":  ([], S(0, 0.7, 0)),                    # back foot
+    HIP_BONE:      ([], S(0, 0.3, -1.65)),                # sink low and shift weight back
+    "Torso_FK":    ([(PITCH, 80)], None),
+    "Head":        ([(PITCH, -85)], None),                # eyes locked on the target
+    "RightArm_FK": ([(PITCH, -110), (ROLL, 8)], None),    # front paws out ahead, chest near the ground
+    "LeftArm_FK":  ([(PITCH, -110), (ROLL, -8)], None),
+    "RightLeg-IK": ([], S(0, 0.5, 0)),                    # back legs coiled
+    "LeftLeg-IK":  ([], S(0, 0.8, 0)),
 }
 
 # Slightly deeper version of the crouch so the hold isn't dead still
 CROUCH_DEEP = dict(CROUCH)
-CROUCH_DEEP[HIP_BONE] = ([], S(0, 0.25, -0.8))
-CROUCH_DEEP["Torso_FK"] = ([(PITCH, 38)], None)
+CROUCH_DEEP[HIP_BONE] = ([], S(0, 0.35, -1.75))
 
 START = {
-    HIP_BONE:      ([], S(0, -0.2, 0.2)),                 # body springs up and forward
-    "Torso_FK":    ([(PITCH, 20)], None),
-    "Head":        ([(PITCH, -15)], None),
-    "RightArm_FK": ([(PITCH, -70), (ROLL, 5)], None),     # arms whip forward
-    "LeftArm_FK":  ([(PITCH, -70), (ROLL, -5)], None),
-    "RightLeg-IK": ([], S(0, -0.3, 0.3)),                 # front foot leaves the ground
-    "LeftLeg-IK":  ([], S(0, 1.0, 0.1)),                  # back foot pushes off
+    HIP_BONE:      ([], S(0, -0.3, -0.6)),                # back legs drive the body up and forward
+    "Torso_FK":    ([(PITCH, 60)], None),                 # front end rises
+    "Head":        ([(PITCH, -70)], None),
+    "RightArm_FK": ([(PITCH, -30), (ROLL, 5)], None),     # front paws push off the ground
+    "LeftArm_FK":  ([(PITCH, -30), (ROLL, -5)], None),
+    "RightLeg-IK": ([], S(0, 1.2, 0.1)),                  # back feet shove off
+    "LeftLeg-IK":  ([], S(0, 1.4, 0.2)),
 }
 
 LUNGE = {
-    HIP_BONE:      ([], S(0, 0, 0.4)),
-    "Torso_FK":    ([(PITCH, 70)], None),                 # body nearly horizontal
-    "Head":        ([(PITCH, -60)], None),                # looking ahead
-    "RightArm_FK": ([(PITCH, -160), (ROLL, 12)], None),   # reaching out in front, claws open
-    "LeftArm_FK":  ([(PITCH, -160), (ROLL, -12)], None),
-    "RightLeg-IK": ([], S(0, 1.2, 0.8)),                  # legs trail behind
-    "LeftLeg-IK":  ([], S(0, 1.8, 0.5)),
+    HIP_BONE:      ([], S(0, 0, -0.6)),
+    "Torso_FK":    ([(PITCH, 85)], None),                 # fully stretched out
+    "Head":        ([(PITCH, -80)], None),
+    "RightArm_FK": ([(PITCH, -170), (ROLL, 12)], None),   # front paws reaching ahead
+    "LeftArm_FK":  ([(PITCH, -170), (ROLL, -12)], None),
+    "RightLeg-IK": ([], S(0, 1.8, 1.0)),                  # back legs trailing
+    "LeftLeg-IK":  ([], S(0, 2.0, 0.8)),
 }
 
-ALL_BONES = sorted({b for pose in (CROUCH, START, LUNGE) for b in pose})
+ALL_BONES = sorted({b for pose in (ALL_FOURS, CROUCH, START, LUNGE) for b in pose})
 
 
 def apply_pose(pose, frame):
@@ -108,7 +120,7 @@ def make_action(name, keys):
 
 
 make_action("Pounce_Crouch", [
-    (0.00, REST),
+    (0.00, ALL_FOURS),
     (0.35, CROUCH),        # sink down
     (0.70, CROUCH_DEEP),   # settle / tense
     (1.00, CROUCH),        # end on the crouch pose (Studio script holds it here)
