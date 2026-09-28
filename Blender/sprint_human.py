@@ -87,23 +87,24 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
 # The main forward lean is on LowerTorso-FK; Torso_FK adds chest bend/twist on top.
 # Hips twist toward the forward leg, chest twists the other way.
-# The forward arm swings in across the chest and turns inward; the back arm
-# stays close to the side. Hips and chest twist hard against each other.
+# The forward arm swings in across the chest and turns inward on the way
+# forward; as soon as it starts back it straightens out, so the back swing is
+# straight. The back arm stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
-    hip=(-0.06, -0.05, -0.26), hips=(22, 10, 1), chest=(4, -14),
-    arms=((50, 6, 0, 0), (-60, -4, -28, -32)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
+    hip=(-0.06, -0.05, -0.32), hips=(22, 10, 1), chest=(4, -14),
+    arms=((50, 6, 0, 0), (-60, -4, -28, -32)), rfoot=(-1.6, 0), lfoot=(1.5, 0.5))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
-    hip=(-0.12, 0, -0.38), hips=(26, 7, -5), chest=(8, -10),
-    arms=((42, 7, 0, 0), (-48, -4, -22, -26)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
+    hip=(-0.12, 0, -0.42), hips=(26, 7, -5), chest=(8, -10),
+    arms=((42, 7, 0, 0), (-48, -2, -8, -10)), rfoot=(-0.8, 0), lfoot=(0.7, 0.9))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
-    hip=(-0.08, -0.05, -0.26), hips=(23, 0, -3), chest=(5, 0),
-    arms=((0, 6, 0, 0), (-5, -6, 0, -4)), rfoot=(0.25, 0), lfoot=(-0.55, 0.95))
+    hip=(-0.08, -0.05, -0.3), hips=(23, 0, -3), chest=(5, 0),
+    arms=((0, 6, 0, 0), (-5, -6, 0, 0)), rfoot=(0.3, 0), lfoot=(-0.65, 0.95))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
     hip=(-0.03, -0.1, 0.0), hips=(21, -8, 0), chest=(4, 12),
-    arms=((-55, 4, 26, 30), (45, -6, 0, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
+    arms=((-55, 4, 26, 30), (45, -6, 0, 0)), rfoot=(1.55, 0.3), lfoot=(-1.6, 0.45))
 
 
 def mirror(pose):
