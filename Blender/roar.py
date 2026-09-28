@@ -60,7 +60,7 @@ def foot(hip, x, y, z):
     return S(x, y, max(z, 0))
 
 
-def P(hip=(0, 0, -0.2), lean=8, twist=0, chest=0, chest_twist=0,
+def P(hip=(0, 0, -0.2), lean=1, twist=0, chest=0, chest_twist=0,
       head=0, head_yaw=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
     """One pose.
     hip: body offset (x, y, z) studs; z stays well below 0 so the knees stay bent
@@ -146,7 +146,7 @@ BROADCAST = [
               shake=dict(hip_z=0.02, lean=1.5, chest=1.5, head=2.5)) + [
     (1.52, P(hip=(0, -0.05, -0.35), lean=12, chest=2, head=12, arms=(5, 12),      # exhale, foot steps back
              rfoot=(0, -0.3, 0.22))),
-    (1.66, P(hip=(0, 0, -0.22), lean=9, head=3)),                                 # settle
+    (1.66, P(hip=(0, 0, -0.22), lean=3, head=2)),                                 # settle
     (1.80, P()),
 ]
 
@@ -156,10 +156,10 @@ PASSIVE = [
     (0.00, P()),
     (0.20, P(hip=(0, 0.03, -0.24), lean=5, chest=-5, head=6, arms=(6, 13))),       # small breath in
 ] + roar_hold(0.36, 1.02, 0.1, ENV_PASSIVE, sweep=8, period=0.7,
-              quiet=dict(hip=(0, 0, -0.24), lean=8, chest=0, head=0, arms=(3, 11)),
+              quiet=dict(hip=(0, 0, -0.24), lean=2, chest=0, head=0, arms=(3, 11)),
               loud=dict(hip=(0, -0.06, -0.32), lean=13, chest=3, head=-9, arms=(10, 15)),
               shake=dict(lean=0.6, head=1.5)) + [
-    (1.14, P(hip=(0, 0, -0.24), lean=9, head=4, arms=(2, 11))),                   # settle
+    (1.14, P(hip=(0, 0, -0.24), lean=3, head=2, arms=(2, 11))),                   # settle
     (1.28, P()),
 ]
 

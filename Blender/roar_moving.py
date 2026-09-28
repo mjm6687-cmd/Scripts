@@ -62,7 +62,7 @@ def foot(hip, x, y, z):
     return S(x, y, max(z, 0))
 
 
-def P(hip=(0, 0, -0.2), lean=8, twist=0, chest=0, chest_twist=0,
+def P(hip=(0, 0, -0.2), lean=1, twist=0, chest=0, chest_twist=0,
       head=0, head_yaw=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
     """One pose.
     hip: body offset (x, y, z) studs; z stays well below 0 so the knees stay bent

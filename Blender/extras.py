@@ -5,8 +5,6 @@
 #   Jump        (0.35 s)       - push off and tuck the legs (Roblox plays Fall right after)
 #   Fall        (loop, 0.8 s)  - airborne: legs hanging, arms out for balance
 #   Land        (0.6 s)        - heavy impact: deep knee bend, body crunches, recovers to the idle stance
-#   Turn_Left / Turn_Right (loop, 1.2 s) - heavy shuffle steps for turning on the spot
-#   Crouch_Turn_Left / Crouch_Turn_Right (loop, 1.2 s) - the same, low in the crouch with shorter lifts
 # Arms are FK (rotated), legs are IK (foot targets moved).
 import bpy
 import math
@@ -61,7 +59,7 @@ def foot(hip, x, y, z):
     return S(x, y, max(z, 0))
 
 
-def P(hip=(0, 0, -0.2), lean=8, twist=0, tilt=0, chest=0, chest_twist=0,
+def P(hip=(0, 0, -0.2), lean=1, twist=0, tilt=0, chest=0, chest_twist=0,
       head=0, head_yaw=0, head_tilt=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
     """One pose. P() with no arguments is the idle/roar stance.
     hip: body offset (x, y, z) studs; z stays below 0 so the knees stay bent
@@ -98,8 +96,8 @@ def all_fcurves(act):
 
 
 # --- Crouch idle (loop, 4 s) ---------------------------------------------------
-# Same body as the crouch walks (low, hunched, arms hanging forward); breathes and shifts weight.
-CROUCH = dict(hip=(0, 0, -0.75), lean=24, chest=6, arms=(-15, 10))
+# As low as the crouch walks but with the back upright, not hunched forward; breathes and shifts weight.
+CROUCH = dict(hip=(0, 0, -0.75), lean=4, chest=1, arms=(-3, 12))
 
 
 def crouch(**changes):
@@ -110,13 +108,13 @@ def crouch(**changes):
 
 CROUCH_IDLE = [
     (0.00, crouch()),
-    (0.55, crouch(hip=(-0.04, 0, -0.71), lean=23, tilt=-1, chest=4, head=-2, head_yaw=-4, arms=(-16, 11))),
-    (1.10, crouch(hip=(-0.06, 0, -0.74), lean=24, tilt=-1.5, chest=5, head_yaw=-5, arms=(-15, 11))),
-    (1.75, crouch(hip=(-0.03, 0, -0.78), lean=25.5, tilt=-0.5, chest=7, head=2, head_yaw=-2, arms=(-13, 10))),
+    (0.55, crouch(hip=(-0.04, 0, -0.71), lean=3, tilt=-1, chest=-1, head=-1, head_yaw=-4, arms=(-4, 13))),
+    (1.10, crouch(hip=(-0.06, 0, -0.74), lean=4, tilt=-1.5, chest=0, head_yaw=-5, arms=(-3, 13))),
+    (1.75, crouch(hip=(-0.03, 0, -0.78), lean=5, tilt=-0.5, chest=2, head=1, head_yaw=-2, arms=(-2, 12))),
     (2.00, crouch()),
-    (2.55, crouch(hip=(0.04, 0, -0.71), lean=23, tilt=1, chest=4, head=-2, head_yaw=4, arms=(-16, 11))),
-    (3.10, crouch(hip=(0.06, 0, -0.74), lean=24, tilt=1.5, chest=5, head_yaw=5, arms=(-15, 11))),
-    (3.75, crouch(hip=(0.03, 0, -0.78), lean=25.5, tilt=0.5, chest=7, head=2, head_yaw=2, arms=(-13, 10))),
+    (2.55, crouch(hip=(0.04, 0, -0.71), lean=3, tilt=1, chest=-1, head=-1, head_yaw=4, arms=(-4, 13))),
+    (3.10, crouch(hip=(0.06, 0, -0.74), lean=4, tilt=1.5, chest=0, head_yaw=5, arms=(-3, 13))),
+    (3.75, crouch(hip=(0.03, 0, -0.78), lean=5, tilt=0.5, chest=2, head=1, head_yaw=2, arms=(-2, 12))),
     (4.00, crouch()),
 ]
 
@@ -149,63 +147,12 @@ LAND = [
     (0.60, P()),                                                                   # idle stance
 ]
 
-# --- Turn in place (loop, 1.2 s) -------------------------------------------------
-# Each foot counter-rotates while planted (so it stays put while the body turns) and
-# then lifts and steps around into the turn. TURN_STEP is how far the body turns per loop.
-TURN_STEP = 30  # degrees per 1.2 s loop
-
-
-def turn_feet(angle_r, angle_l, lift_r, lift_l):
-    """Foot offsets (from the stance) for feet rotated around the body by the given angles."""
-    def spot(x, angle, lift):
-        a = math.radians(angle)
-        return (x * math.cos(a) - x, x * math.sin(a), lift)  # rotate (x, 0) around the body centre
-    return dict(rfoot=spot(-(0.5 + STANCE), angle_r, lift_r), lfoot=spot(0.5 + STANCE, angle_l, lift_l))
-
-
-def turn_keys(direction, base=None, lift=0.35):
-    """direction: +1 = turn left, -1 = turn right. The foot on the turning side steps first.
-    base: pose to turn in (default = idle stance, CROUCH = crouched). lift: how high feet step."""
-    base = dict(base or dict(hip=(0, 0, -0.2)))
-    half = TURN_STEP / 2 * direction
-    keys = []
-    for i in range(13):
-        t = i / 12                                       # 0..1 through the loop
-        lead_swing = t < 0.4                             # first foot steps during 0-0.4
-        trail_swing = 0.5 <= t < 0.9                     # second foot steps during 0.5-0.9
-
-        def angle(swinging, start, length, phase):
-            if swinging:
-                k = (t - start) / length
-                return -half + 2 * half * k, lift * math.sin(math.pi * k)
-            return half - 2 * half * phase, 0.0         # planted: slide back against the turn
-
-        lead = angle(lead_swing, 0.0, 0.4, (t - 0.4) / 0.6 if t >= 0.4 else 0)
-        trail_phase = (t - 0.9) / 0.6 if t >= 0.9 else (t + 0.1) / 0.6
-        trail = angle(trail_swing, 0.5, 0.4, trail_phase)
-        # which real foot is which
-        if direction > 0:   # turning left: left foot leads
-            feet = turn_feet(trail[0], lead[0], trail[1], lead[1])
-        else:
-            feet = turn_feet(lead[0], trail[0], lead[1], trail[1])
-        kw = dict(base)
-        x, y, z = kw["hip"]
-        kw["hip"] = (x, y, z - 0.06 * (math.sin(2 * math.pi * t * 2) ** 2))   # small bob on each plant
-        kw.update(twist=6 * direction, chest_twist=4 * direction, head_yaw=10 * direction, **feet)
-        keys.append((t * 1.2, P(**kw)))
-    return keys
-
-
 ACTIONS = {
     # name: (keys, loops, lag)
     "Crouch_Idle": (CROUCH_IDLE, True, {"Head": 0.15, "RightArm_FK": 0.12, "LeftArm_FK": 0.12}),
     "Jump":        (JUMP, False, {"RightArm_FK": 0.03, "LeftArm_FK": 0.03}),
     "Fall":        (FALL, True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
     "Land":        (LAND, False, {"Head": 0.03, "RightArm_FK": 0.04, "LeftArm_FK": 0.04}),
-    "Turn_Left":   (turn_keys(1), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
-    "Turn_Right":  (turn_keys(-1), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
-    "Crouch_Turn_Left":  (turn_keys(1, CROUCH, lift=0.25), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
-    "Crouch_Turn_Right": (turn_keys(-1, CROUCH, lift=0.25), True, {"RightArm_FK": 0.05, "LeftArm_FK": 0.05}),
 }
 
 

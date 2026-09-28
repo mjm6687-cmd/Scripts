@@ -181,14 +181,6 @@ return {
 	walkAnimSpeed_RightDiagRev = nil,
 
 	-- =====================
-	-- TURN-IN-PLACE ANIMS
-	-- =====================
-	turnYawThreshold = 3,      -- deg accumulated before the turn anim fires
-	turnJitterIgnore = 0.15,   -- deg; per-frame deltas under this are noise
-	turnAccumulateDecay = 8,   -- deg/s the accumulator bleeds back to zero
-	turnAnimHoldTime = 0.2,    -- seconds the anim keeps playing after turning stops
-
-	-- =====================
 	-- IDLE EMOTES (head twitches, sniffing, look-arounds)
 	-- =====================
 	idleEmoteMinTime = 8,

@@ -58,7 +58,7 @@ def foot(hip, x, y, z):
     return S(x, y, max(z, 0))
 
 
-def P(hip=(0, 0, -0.2), lean=8, twist=0, tilt=0, chest=0, chest_twist=0,
+def P(hip=(0, 0, -0.2), lean=1, twist=0, tilt=0, chest=0, chest_twist=0,
       head=0, head_yaw=0, arms=(0, 10), rfoot=(-STANCE, 0, 0), lfoot=(STANCE, 0, 0)):
     """One pose.
     hip: body offset (x, y, z) studs; z stays well below 0 so the knees stay bent
@@ -87,18 +87,18 @@ def P(hip=(0, 0, -0.2), lean=8, twist=0, tilt=0, chest=0, chest_twist=0,
 # The weight shifts over the right leg on the first breath and the left leg on the second.
 KEYS = [
     (0.00, P()),                                                                   # roar stance
-    (0.55, P(hip=(-0.04, 0, -0.17), lean=7, tilt=-1, chest=-3, head=-2,            # breathe in, weight right
+    (0.55, P(hip=(-0.04, 0, -0.17), lean=0, tilt=-1, chest=-2, head=-1,            # breathe in, weight right
              head_yaw=-4, arms=(-1, 11))),
-    (1.10, P(hip=(-0.06, 0, -0.21), lean=8, tilt=-1.5, chest=-1, head=0,           # hold
+    (1.10, P(hip=(-0.06, 0, -0.21), lean=1, tilt=-1.5, chest=-1, head=0,           # hold
              head_yaw=-5, arms=(0, 11))),
-    (1.75, P(hip=(-0.03, 0, -0.24), lean=9.5, tilt=-0.5, chest=1.5, head=2,        # breathe out, sink
+    (1.75, P(hip=(-0.03, 0, -0.24), lean=2, tilt=-0.5, chest=1, head=1,            # breathe out, sink
              head_yaw=-2, arms=(2, 10))),
     (2.00, P()),                                                                   # back through the stance
-    (2.55, P(hip=(0.04, 0, -0.17), lean=7, tilt=1, chest=-3, head=-2,              # breathe in, weight left
+    (2.55, P(hip=(0.04, 0, -0.17), lean=0, tilt=1, chest=-2, head=-1,              # breathe in, weight left
              head_yaw=4, arms=(-1, 11))),
-    (3.10, P(hip=(0.06, 0, -0.21), lean=8, tilt=1.5, chest=-1, head=0,             # hold
+    (3.10, P(hip=(0.06, 0, -0.21), lean=1, tilt=1.5, chest=-1, head=0,             # hold
              head_yaw=5, arms=(0, 11))),
-    (3.75, P(hip=(0.03, 0, -0.24), lean=9.5, tilt=0.5, chest=1.5, head=2,          # breathe out, sink
+    (3.75, P(hip=(0.03, 0, -0.24), lean=2, tilt=0.5, chest=1, head=1,              # breathe out, sink
              head_yaw=2, arms=(2, 10))),
     (4.00, P()),
 ]

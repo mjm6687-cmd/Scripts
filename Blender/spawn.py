@@ -58,7 +58,7 @@ def foot(hip, x, y, z):
     return S(x, y, z)  # no floor limit here: the spawn starts underground
 
 
-def P(hip=(0, 0, -0.2), lean=8, twist=0, tilt=0, chest=0, chest_twist=0,
+def P(hip=(0, 0, -0.2), lean=1, twist=0, tilt=0, chest=0, chest_twist=0,
       head=0, head_yaw=0, head_tilt=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
     """One pose. P() with no arguments is the idle/roar stance.
     hip: body offset (x, y, z) studs; z stays below 0 so the knees stay bent

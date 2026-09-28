@@ -15,7 +15,6 @@
 --   * directional momentum in first person / shift lock
 --   * body lean and terrain alignment through RootJoint.C0
 --   * 8-way directional walk and crouch anims with speed-matched playback
---   * turn-in-place anims driven by accumulated yaw (standing and crouched)
 --   * uphill slope slowdown
 --   * falling / landing anims and the landing momentum kill
 --   * idle emotes
@@ -393,10 +392,10 @@ end
 	ANIMATION NAMES (Animation objects in the rig's Animations folder).
 	The first name in each list is the current one; the rest are older names.
 
-	  Idle, Jog, Sprint, Fall, Land, TurnLeft, TurnRight
+	  Idle, Jog, Sprint, Fall, Land
 	  WalkForward, WalkBackward, WalkLeft, WalkRight,
 	  WalkForwardLeft, WalkForwardRight, WalkBackwardLeft, WalkBackwardRight
-	  CrouchIdle, CrouchTurnLeft, CrouchTurnRight
+	  CrouchIdle
 	  CrouchForward, CrouchBackward, CrouchLeft, CrouchRight,
 	  CrouchForwardLeft, CrouchForwardRight, CrouchBackwardLeft, CrouchBackwardRight
 	  IdleEmote1, IdleEmote2, ...   (optional)
@@ -414,15 +413,10 @@ local ANIM = {
 	rightDiagRev = loadAnim({ "WalkBackwardRight", "WalkRightDiagonalReverse" }, true, movPriority),
 	jog = loadAnim("Jog", true, movPriority),
 	sprint = loadAnim("Sprint", true, movPriority),
-	-- yaw increasing = turning left
-	turnLeft = loadAnim({ "TurnLeft", "TurnInIdle" }, true, movPriority),
-	turnRight = loadAnim({ "TurnRight", "TurnOutIdle" }, true, movPriority),
 	falling = loadAnim({ "Fall", "Falling" }, true, fallPriority),
 	landing = loadAnim({ "Land", "Landing" }, false, fallPriority),
 
 	crouchIdle = loadAnim("CrouchIdle", true, idlePriority),
-	crouchTurnLeft = loadAnim("CrouchTurnLeft", true, movPriority),
-	crouchTurnRight = loadAnim("CrouchTurnRight", true, movPriority),
 	crouchForward = loadAnim("CrouchForward", true, movPriority),
 	crouchBackward = loadAnim("CrouchBackward", true, movPriority),
 	crouchLeft = loadAnim("CrouchLeft", true, movPriority),
@@ -471,13 +465,6 @@ if ANIM.sprint then
 	table.insert(allMoveAnims, ANIM.sprint)
 end
 
-local allTurnAnims = {}
-for _, key in ipairs({ "turnLeft", "turnRight", "crouchTurnLeft", "crouchTurnRight" }) do
-	if ANIM[key] then
-		table.insert(allTurnAnims, ANIM[key])
-	end
-end
-
 local crouchAnimSet = {}
 for _, t in ipairs(allCrouchAnims) do
 	crouchAnimSet[t] = true
@@ -521,7 +508,6 @@ local idleEmoteThreshold = IDLE_EMOTE_MIN + math.random() * (IDLE_EMOTE_MAX - ID
 local currentIdleEmote: AnimationTrack? = nil
 
 local currentWalkAnim: AnimationTrack? = nil
-local currentTurnAnim: AnimationTrack? = nil
 
 local function StopAllAnims(list, except, transTime)
 	for _, anim in ipairs(list) do
@@ -759,82 +745,6 @@ local function UpdateWalkAnim()
 		currentWalkAnim = target
 	else
 		target:AdjustSpeed(getAnimPlaybackSpeed(target))
-	end
-end
-
--- =====================
--- TURN IN PLACE
--- =====================
-local TURN_YAW_THRESHOLD = config.turnYawThreshold or 3
-local TURN_JITTER_IGNORE = config.turnJitterIgnore or 0.15
-local TURN_ACCUM_DECAY = config.turnAccumulateDecay or 8
-local TURN_HOLD_TIME = config.turnAnimHoldTime or 0.2
-local accumulatedYaw = 0
-local lastTurnDetectedAt = 0
-local lastYaw: number? = nil
-
-local function StopAllTurnAnims(t: number?)
-	for _, anim in ipairs(allTurnAnims) do
-		if anim.IsPlaying then
-			anim:Stop(t or 0.15)
-		end
-	end
-	currentTurnAnim = nil
-end
-
--- Accumulated-yaw approach: sum yaw changes over a short window instead of
--- testing one frame's delta, so a slow deliberate turn still triggers but a
--- one-pixel mouse jitter decays away before it can.
-local function UpdateTurnAnim(yawDelta: number, dt: number)
-	if #allTurnAnims == 0 then return end
-
-	if moving then
-		StopAllTurnAnims(0.15)
-		lastTurnDetectedAt = 0
-		accumulatedYaw = 0
-		return
-	end
-
-	if math.abs(yawDelta) < TURN_JITTER_IGNORE then
-		yawDelta = 0
-	end
-
-	if yawDelta ~= 0 then
-		if (accumulatedYaw > 0 and yawDelta < 0) or (accumulatedYaw < 0 and yawDelta > 0) then
-			accumulatedYaw = 0
-		end
-		accumulatedYaw += yawDelta
-	else
-		if math.abs(accumulatedYaw) <= TURN_ACCUM_DECAY * dt then
-			accumulatedYaw = 0
-		else
-			accumulatedYaw -= math.sign(accumulatedYaw) * TURN_ACCUM_DECAY * dt
-		end
-	end
-
-	local now = os.clock()
-	if math.abs(accumulatedYaw) >= TURN_YAW_THRESHOLD then
-		lastTurnDetectedAt = now
-		local target
-		if crouching and ANIM.crouchTurnLeft then
-			target = (accumulatedYaw > 0) and ANIM.crouchTurnLeft or ANIM.crouchTurnRight
-		else
-			target = (accumulatedYaw > 0) and ANIM.turnLeft or ANIM.turnRight
-		end
-		if not target then
-			StopAllTurnAnims(0.15)
-			return
-		end
-		if target ~= currentTurnAnim then
-			StopAllTurnAnims(0.1)
-			if not target.IsPlaying then
-				target:Play(0.1)
-			end
-			currentTurnAnim = target
-		end
-		accumulatedYaw = 0
-	elseif currentTurnAnim and (now - lastTurnDetectedAt) > TURN_HOLD_TIME then
-		StopAllTurnAnims(0.2)
 	end
 end
 
@@ -1118,7 +1028,6 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 		end
 
 		UpdateWalkAnim()
-		UpdateTurnAnim(0, deltaTime)
 		return
 	end
 
@@ -1358,18 +1267,6 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 
 		wasFalling = airborne
 	end
-
-	-- ---- turn-in-place anims ----
-	local look = rootPart.CFrame.LookVector
-	local curYaw = math.deg(math.atan2(look.X, look.Z))
-	local yawDelta = 0
-	if lastYaw ~= nil then
-		yawDelta = curYaw - lastYaw
-		if yawDelta > 180 then yawDelta -= 360 end
-		if yawDelta < -180 then yawDelta += 360 end
-	end
-	lastYaw = curYaw
-	UpdateTurnAnim(yawDelta, deltaTime)
 end)
 
 -- =====================
@@ -1392,7 +1289,6 @@ humanoid.Died:Connect(function()
 	ContextActionService:UnbindAction("Creature_Crouch")
 	idlePivoting = false
 	landingLocked = false
-	StopAllTurnAnims(0)
 	StopAllAnims(allMoveAnims, nil, 0.1)
 	if ANIM.idle then ANIM.idle:Stop(0.1) end
 	if ANIM.crouchIdle then ANIM.crouchIdle:Stop(0.1) end
