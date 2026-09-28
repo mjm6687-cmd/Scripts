@@ -12,9 +12,9 @@ from mathutils import Quaternion, Vector
 RIG_NAME = "__PrimaryArmature"
 HIP_BONE = "LowerTorso-FK"  # moves the body; swap to "PrimaryTorso_Positioner" if the feet get dragged along
 
-# Armature-space axes (confirmed with Idle_Test): front of the character is -Y.
-PITCH = (1, 0, 0)  # + leans torso/head forward, - swings arms forward
-ROLL = (0, 1, 0)   # + moves right arm outward, - moves left arm outward
+# Armature-space axes: the character faces +Y in this rig.
+PITCH = (-1, 0, 0)  # + leans torso/head forward, - swings arms forward
+ROLL = (0, -1, 0)   # + moves right arm outward, - moves left arm outward
 
 rig = bpy.data.objects[RIG_NAME]
 bpy.context.view_layer.objects.active = rig
@@ -30,8 +30,8 @@ STUD = (bones["Head"].head_local.z - bones["LeftLeg-IK"].head_local.z) / 4 or 1.
 
 
 def S(x, y, z):
-    """Offset in studs, armature space. y<0 is forward, z>0 is up."""
-    return (x * STUD, y * STUD, z * STUD)
+    """Offset in studs relative to the character. y<0 is forward, z>0 is up."""
+    return (-x * STUD, -y * STUD, z * STUD)  # flipped because the rig faces +Y
 
 
 # Each pose: bone -> (rotations [(axis, degrees)], location offset in studs or None)
