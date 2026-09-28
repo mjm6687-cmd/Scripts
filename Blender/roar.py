@@ -43,6 +43,7 @@ def S(x, y, z):
 
 
 ARM_DROP = 0.15  # studs the arms sit lower on the body (matches the walks)
+STANCE = 0.3     # studs each foot sits out to the side (matches idle.py)
 LEG = 2.0
 REACH = 1.05 * LEG
 
@@ -74,8 +75,8 @@ def P(hip=(0, 0, -0.2), lean=8, twist=0, chest=0, chest_twist=0,
         "Torso_FK":    ([(PITCH, chest), (YAW, chest_twist)], None),
         "RightArm_FK": ([(PITCH, arms[0]), (ROLL, arms[1])], S(0, 0, -ARM_DROP)),
         "LeftArm_FK":  ([(PITCH, arms[0]), (ROLL, -arms[1])], S(0, 0, -ARM_DROP)),
-        "RightLeg-IK": ([], foot(hip, *rfoot)),
-        "LeftLeg-IK":  ([], foot(hip, *lfoot)),
+        "RightLeg-IK": ([], foot(hip, rfoot[0] - STANCE, rfoot[1], rfoot[2])),
+        "LeftLeg-IK":  ([], foot(hip, lfoot[0] + STANCE, lfoot[1], lfoot[2])),
     }
     if HEAD_MOVES:
         pose["Head"] = ([(PITCH, head), (YAW, head_yaw)], None)
