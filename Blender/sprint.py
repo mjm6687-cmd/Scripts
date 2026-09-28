@@ -38,47 +38,55 @@ def S(x, y, z):
     return (-x * STUD * FACING, -y * STUD * FACING, z * STUD)
 
 
+# Leg reach limit (studs). Feet are pulled in so the IK never over-stretches.
+LEG = 2.0
+REACH = 0.9 * LEG
+
+
+def foot(hip, y, z):
+    """Foot target (y, z) in studs, shortened front-to-back if it's out of reach."""
+    hy, hz = hip[1], LEG + hip[2]
+    dz = min(abs(z - hz), REACH)
+    max_dy = math.sqrt(REACH ** 2 - dz ** 2)
+    y = hy + max(-max_dy, min(max_dy, y - hy))
+    return S(0, y, max(z, 0))
+
+
+def P(hip, hips, chest, head, arms, rfoot, lfoot):
+    """One pose of the stride.
+    hip:   (x, y, z) body offset in studs      hips:  (lean, twist, tilt) of LowerTorso-FK
+    chest: (bend, twist) extra on Torso_FK       head:  pitch (counters the lean to look ahead)
+    arms:  ((right pitch, roll), (left pitch, roll))   rfoot/lfoot: (y, z) in studs
+    """
+    return {
+        HIP_BONE:      ([(PITCH, hips[0]), (YAW, hips[1]), (ROLL, hips[2])], S(*hip)),
+        "Torso_FK":    ([(PITCH, chest[0]), (YAW, chest[1])], None),
+        "Head":        ([(PITCH, head)], None),
+        "RightArm_FK": ([(PITCH, arms[0][0]), (ROLL, arms[0][1])], None),
+        "LeftArm_FK":  ([(PITCH, arms[1][0]), (ROLL, arms[1][1])], None),
+        "RightLeg-IK": ([], foot(hip, *rfoot)),
+        "LeftLeg-IK":  ([], foot(hip, *lfoot)),
+    }
+
+
 # --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
-# Each pose: bone -> (rotations [(axis, degrees)], location offset in studs or None)
-CONTACT = {  # right heel hits the ground way out in front
-    HIP_BONE:      ([], S(-0.05, 0, -0.2)),
-    "Torso_FK":    ([(PITCH, 22), (YAW, -8)], None),
-    "Head":        ([(PITCH, -17)], None),
-    "RightArm_FK": ([(PITCH, 35), (ROLL, 10)], None),
-    "LeftArm_FK":  ([(PITCH, -45), (ROLL, -10)], None),
-    "RightLeg-IK": ([], S(0, -1.3, 0)),
-    "LeftLeg-IK":  ([], S(0, 1.2, 0.5)),
-}
+# The main forward lean is on LowerTorso-FK; Torso_FK adds chest bend/twist on top.
+# Hips twist toward the forward leg, chest twists the other way.
+CONTACT = P(  # right foot reaches out in front and hits the ground
+    hip=(-0.05, 0, -0.35), hips=(28, 6, 0), chest=(0, -14), head=-28,
+    arms=((35, 10), (-45, -10)), rfoot=(-1.0, 0), lfoot=(0.9, 0.35))
 
-IMPACT = {  # the weight lands: body sinks hard, chest crunches, head bobs
-    HIP_BONE:      ([], S(-0.12, 0.05, -0.45)),
-    "Torso_FK":    ([(PITCH, 26), (YAW, -6), (ROLL, -3)], None),
-    "Head":        ([(PITCH, -13)], None),
-    "RightArm_FK": ([(PITCH, 30), (ROLL, 12)], None),
-    "LeftArm_FK":  ([(PITCH, -38), (ROLL, -12)], None),
-    "RightLeg-IK": ([], S(0, -0.7, 0)),
-    "LeftLeg-IK":  ([], S(0, 0.7, 1.0)),
-}
+IMPACT = P(  # the weight lands: body sinks hard, chest crunches, hips tilt, head bobs
+    hip=(-0.12, 0.05, -0.6), hips=(34, 4, -4), chest=(4, -10), head=-33,
+    arms=((30, 12), (-38, -12)), rfoot=(-0.55, 0), lfoot=(0.55, 0.6))
 
-PASS = {  # planted foot under the body, other knee drives through high
-    HIP_BONE:      ([], S(-0.08, 0, -0.3)),
-    "Torso_FK":    ([(PITCH, 22), (ROLL, -2)], None),
-    "Head":        ([(PITCH, -16)], None),
-    "RightArm_FK": ([(PITCH, 0), (ROLL, 10)], None),
-    "LeftArm_FK":  ([(PITCH, -5), (ROLL, -10)], None),
-    "RightLeg-IK": ([], S(0, 0.1, 0)),
-    "LeftLeg-IK":  ([], S(0, -0.4, 1.2)),
-}
+PASS = P(  # planted foot under the body, other knee drives through
+    hip=(-0.08, 0, -0.45), hips=(30, 0, -3), chest=(2, 0), head=-31,
+    arms=((0, 10), (-5, -10)), rfoot=(0.1, 0), lfoot=(-0.3, 0.7))
 
-PUSH = {  # shove off the back foot, body at its highest
-    HIP_BONE:      ([], S(-0.02, -0.05, 0.0)),
-    "Torso_FK":    ([(PITCH, 18), (YAW, 5)], None),
-    "Head":        ([(PITCH, -19)], None),
-    "RightArm_FK": ([(PITCH, -35), (ROLL, 10)], None),
-    "LeftArm_FK":  ([(PITCH, 30), (ROLL, -10)], None),
-    "RightLeg-IK": ([], S(0, 1.0, 0.1)),
-    "LeftLeg-IK":  ([], S(0, -1.2, 0.5)),
-}
+PUSH = P(  # shove off the back foot, body rises and straightens a bit
+    hip=(-0.02, -0.05, -0.2), hips=(25, -4, 0), chest=(0, 8), head=-26,
+    arms=((-35, 10), (30, -10)), rfoot=(0.8, 0.05), lfoot=(-0.95, 0.35))
 
 
 def mirror(pose):
