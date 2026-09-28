@@ -66,6 +66,16 @@ local SOUNDS = {
 		"rbxassetid://71285117002124",
 		"rbxassetid://119770884121560",
 	},
+	-- Played one at a time, at random, from the orb's sound volume.
+	Random = {
+		"rbxassetid://9125549762",
+		"rbxassetid://9125550082",
+		"rbxassetid://9125549361",
+		"rbxassetid://9125550013",
+		"rbxassetid://9125549064",
+		"rbxassetid://9125549390",
+		"rbxassetid://9125548740",
+	},
 }
 local SOUND = {
 	hearDistance = 80,        -- sounds start/stop within this range of the camera
@@ -79,6 +89,8 @@ local SOUND = {
 	clackVolume = { 0.2, 0.4 },
 	creakEvery = { 3, 8 },    -- seconds between creaks
 	clackEvery = { 2, 6 },
+	randomVolume = 0.7,
+	randomEvery = { 14, 35 }, -- seconds between the Random sounds
 }
 
 local KINDS = {
@@ -345,6 +357,7 @@ local function startSounds(entry)
 	end
 	entry.nextCreak = os.clock() + soundRng:NextNumber(1, SOUND.creakEvery[2])
 	entry.nextClack = os.clock() + soundRng:NextNumber(1, SOUND.clackEvery[2])
+	entry.nextRandom = os.clock() + soundRng:NextNumber(SOUND.randomEvery[1], SOUND.randomEvery[2])
 end
 
 local function stopSounds(entry)
@@ -408,6 +421,23 @@ local function updateSounds(entry, breathe: number, surge: number, near: boolean
 	if now >= entry.nextClack then
 		entry.nextClack = now + soundRng:NextNumber(SOUND.clackEvery[1], SOUND.clackEvery[2])
 		fromRandomRock(entry, pickId(SOUNDS.Clacks), SOUND.clackVolume, "Grit")
+	end
+	if now >= entry.nextRandom then
+		entry.nextRandom = now + soundRng:NextNumber(SOUND.randomEvery[1], SOUND.randomEvery[2])
+		-- any of them except the one played last time
+		local choices = {}
+		for _, id in ipairs(SOUNDS.Random) do
+			if has(id) and (id ~= entry.lastRandom or #SOUNDS.Random == 1) then
+				table.insert(choices, id)
+			end
+		end
+		if #choices > 0 then
+			local id = choices[soundRng:NextInteger(1, #choices)]
+			entry.lastRandom = id
+			local s = newSound(entry.orbAnchor, id, SOUND.randomVolume, 90)
+			s:Play()
+			Debris:AddItem(s, 30)
+		end
 	end
 end
 
