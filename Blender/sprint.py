@@ -41,6 +41,7 @@ def S(x, y, z):
 # Leg reach limit (studs). Feet are pulled in so the IK never over-stretches.
 LEG = 2.0
 ARM_SWING = 0.2  # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
+ARM_SPREAD = 0.4  # how far the arms lift out to the sides (1 = original, 0 = hanging straight down)
 REACH = 1.05 * LEG  # a touch over LEG: a planted leg reads as straight, not broken
 
 
@@ -63,8 +64,8 @@ def P(hip, hips, chest, head, arms, rfoot, lfoot):
         HIP_BONE:      ([(PITCH, hips[0]), (YAW, hips[1]), (ROLL, hips[2])], S(*hip)),
         "Torso_FK":    ([(PITCH, chest[0]), (YAW, chest[1])], None),
         "Head":        ([(PITCH, head)], None),
-        "RightArm_FK": ([(PITCH, arms[0][0] * ARM_SWING), (ROLL, arms[0][1])], None),
-        "LeftArm_FK":  ([(PITCH, arms[1][0] * ARM_SWING), (ROLL, arms[1][1])], None),
+        "RightArm_FK": ([(PITCH, arms[0][0] * ARM_SWING), (ROLL, arms[0][1] * ARM_SPREAD)], None),
+        "LeftArm_FK":  ([(PITCH, arms[1][0] * ARM_SWING), (ROLL, arms[1][1] * ARM_SPREAD)], None),
         "RightLeg-IK": ([], foot(hip, *rfoot)),
         "LeftLeg-IK":  ([], foot(hip, *lfoot)),
     }
