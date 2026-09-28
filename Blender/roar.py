@@ -1,9 +1,9 @@
 # Heavy roars for the R6 IK/FK Blender rig (v2.22) - same style as walk.py.
 # Run in Blender: Scripting tab > New/Open > Run Script.
 # Creates three one-shot, in-place actions on __PrimaryArmature:
-#   Roar_Broadcast  (2.90 s) - Giant_Bug_Vocals_4: big announcing roar, stomp, head raised and sweeping
-#   Roar_Passive    (1.45 s) - Giant_Bug_Vocals_3: low-key warning roar, no step, gentle rumble
-#   Roar_Aggressive (1.60 s) - Giant_Bug_Vocals_1: fast threat, lunges a step in, claws forward, violent shake
+#   Roar_Broadcast  (1.80 s) - Giant_Bug_Vocals_4: big announcing roar, stomp, head raised and sweeping
+#   Roar_Passive    (1.28 s) - Giant_Bug_Vocals_3: low-key warning roar, no step, gentle rumble
+#   Roar_Aggressive (1.38 s) - Giant_Bug_Vocals_1: fast threat, lunges a step in, claws forward, violent shake
 # Each roar is timed to its sound: the ENV_ lists are the audio's loudness every 0.05 s
 # (1 = loudest), and the roar pose, shake and head sweep follow that loudness.
 # Arms are FK (rotated), legs are IK (foot targets moved). Knees stay bent the whole time.
@@ -130,8 +130,8 @@ ENV_AGGRESSIVE = [0.00, 0.00, 0.01, 0.02, 0.04, 0.11, 0.35, 0.74, 0.94, 0.59, 0.
                   0.80, 1.00, 0.77, 0.75, 0.68, 0.35, 0.27, 0.20, 0.24, 0.10, 0.09, 0.04, 0.04, 0.02, 0.04, 0.02,
                   0.02, 0.01, 0.01, 0.01, 0.01, 0.00, 0.00]
 
-# --- Roar 1: broadcast (2.90 s) ------------------------------------------------
-# Sound: starts at 0.15 s, full blast 0.35-1.35 s, lower roar to 2.1 s, last burst at 2.4 s, silent by 2.65 s.
+# --- Roar 1: broadcast (1.80 s) ------------------------------------------------
+# Sound: starts at 0.15 s, full blast 0.35-1.35 s; everything after that is echo, so the body settles.
 STOMP = dict(rfoot=(0, -0.5, 0), lfoot=(0, 0.1, 0))
 BROADCAST = [
     (0.00, P()),                                                                  # standing
@@ -139,31 +139,31 @@ BROADCAST = [
              rfoot=(0, -0.25, 0.25))),
     (0.28, P(hip=(0, -0.12, -0.5), lean=14, twist=4, chest=-4, head=-18,           # stomp as the sound hits
              arms=(30, 38), **STOMP)),
-] + roar_hold(0.34, 2.55, 0.073, ENV_BROADCAST, sweep=15, period=1.0,
+] + roar_hold(0.34, 1.38, 0.073, ENV_BROADCAST, sweep=15, period=1.0,
               quiet=dict(hip=(0, -0.08, -0.4), lean=10, twist=3, chest=0, head=-6, arms=(12, 22), **STOMP),
               loud=dict(hip=(0, -0.13, -0.55), lean=16, twist=4, chest=-5, head=-18, arms=(34, 42), **STOMP),
               shake=dict(hip_z=0.02, lean=1.5, chest=1.5, head=2.5)) + [
-    (2.66, P(hip=(0, -0.05, -0.35), lean=12, chest=2, head=12, arms=(5, 12),      # exhale, foot steps back
+    (1.52, P(hip=(0, -0.05, -0.35), lean=12, chest=2, head=12, arms=(5, 12),      # exhale, foot steps back
              rfoot=(0, -0.3, 0.22))),
-    (2.78, P(hip=(0, 0, -0.22), lean=9, head=3)),                                 # settle
-    (2.90, P()),
+    (1.66, P(hip=(0, 0, -0.22), lean=9, head=3)),                                 # settle
+    (1.80, P()),
 ]
 
-# --- Roar 2: passive (1.45 s) --------------------------------------------------
-# Sound: starts at 0.15 s, full 0.35-1.0 s, fades out by 1.35 s.
+# --- Roar 2: passive (1.28 s) --------------------------------------------------
+# Sound: starts at 0.15 s, full 0.35-1.0 s; the fade after that is echo.
 PASSIVE = [
     (0.00, P()),
     (0.20, P(hip=(0, 0.03, -0.24), lean=5, chest=-5, head=6, arms=(6, 13))),       # small breath in
-] + roar_hold(0.36, 1.2, 0.1, ENV_PASSIVE, sweep=8, period=0.7,
+] + roar_hold(0.36, 1.02, 0.1, ENV_PASSIVE, sweep=8, period=0.7,
               quiet=dict(hip=(0, 0, -0.24), lean=8, chest=0, head=0, arms=(3, 11)),
               loud=dict(hip=(0, -0.06, -0.32), lean=13, chest=3, head=-9, arms=(10, 15)),
               shake=dict(lean=0.6, head=1.5)) + [
-    (1.32, P(hip=(0, 0, -0.24), lean=9, head=4, arms=(2, 11))),                   # settle
-    (1.45, P()),
+    (1.14, P(hip=(0, 0, -0.24), lean=9, head=4, arms=(2, 11))),                   # settle
+    (1.28, P()),
 ]
 
-# --- Roar 3: aggressive (1.60 s) -----------------------------------------------
-# Sound: slams in at 0.3 s, pulses at 0.4 / 0.65 / 0.85 s, drops at 1.05 s, tail to 1.8 s.
+# --- Roar 3: aggressive (1.38 s) -----------------------------------------------
+# Sound: slams in at 0.3 s, pulses at 0.4 / 0.65 / 0.85 s, ends at 1.05 s; the tail is echo.
 LUNGE = dict(rfoot=(0, -0.65, 0), lfoot=(0, 0.2, 0))
 AGGRESSIVE = [
     (0.00, P()),
@@ -172,13 +172,13 @@ AGGRESSIVE = [
              rfoot=(0, -0.3, 0.25))),
     (0.34, P(hip=(0, -0.25, -0.6), lean=30, twist=6, chest=8, head=-18,             # lunge lands with the hit
              arms=(-25, 32), **LUNGE)),
-] + roar_hold(0.38, 1.2, 0.05, ENV_AGGRESSIVE, sweep=6, period=0.35,
+] + roar_hold(0.38, 1.04, 0.05, ENV_AGGRESSIVE, sweep=6, period=0.35,
               quiet=dict(hip=(0, -0.2, -0.5), lean=22, twist=5, chest=5, head=-6, arms=(-10, 26), **LUNGE),
               loud=dict(hip=(0, -0.27, -0.66), lean=33, twist=6, chest=9, head=-18, arms=(-30, 36), **LUNGE),
               shake=dict(hip_z=0.03, lean=2, chest=2, head=3, arm=3)) + [
-    (1.36, P(hip=(0, -0.1, -0.4), lean=16, head=8, arms=(0, 14),                  # pull back, foot returns
+    (1.18, P(hip=(0, -0.1, -0.4), lean=16, head=8, arms=(0, 14),                  # pull back, foot returns
              rfoot=(0, -0.35, 0.22))),
-    (1.60, P()),
+    (1.38, P()),
 ]
 
 ROARS = {"Roar_Broadcast": BROADCAST, "Roar_Passive": PASSIVE, "Roar_Aggressive": AGGRESSIVE}
