@@ -35,7 +35,7 @@ STUD = (bones["Head"].head_local.z - bones["LeftLeg-IK"].head_local.z) / 4 or 1.
 
 def S(x, y, z):
     """Offset in studs relative to the character. x<0 is its right, y<0 forward, z>0 up."""
-    return (x * STUD * FACING, y * STUD * FACING, z * STUD)
+    return (-x * STUD * FACING, -y * STUD * FACING, z * STUD)
 
 
 # --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
