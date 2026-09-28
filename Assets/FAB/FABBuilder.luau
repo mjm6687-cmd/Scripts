@@ -130,7 +130,9 @@ local function B(parent, name, x0, y0, z0, x1, y1, z1, mat, color)
 end
 
 local function rod(parent, name, a, b, t, mat)
-	return mk(parent, "Part", name, CFrame.lookAt((a + b) / 2, b), Vector3.new(t, t, (b - a).Magnitude), mat)
+	-- A vertical rod needs a different "up" hint, or lookAt has no sideways axis.
+	local up = math.abs((b - a).Unit.Y) > 0.99 and Vector3.zAxis or Vector3.yAxis
+	return mk(parent, "Part", name, CFrame.lookAt((a + b) / 2, b, up), Vector3.new(t, t, (b - a).Magnitude), mat)
 end
 
 -- Upright cylinder standing on y0.

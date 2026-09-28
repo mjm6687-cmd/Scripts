@@ -138,6 +138,19 @@ are `MESH_...` placeholder boxes with the `Baseplate Tile` texture, tagged
 `Assets/Tools/ListMaterials.luau` (Command Bar) prints everything in your
 MaterialService.
 
+## Hollow Lift (gravity anomaly set piece)
+
+`Assets/Anomaly/HollowLiftBuilder.luau` is a **Command Bar** script: point the camera
+at the ground and run it to place the passive gravity anomaly (crater, cracks,
+ForceField lens, floating rocks, peeled slabs, bent tree, rising dust) as
+`Workspace > HollowLift`. `VARIANT` = `Dry` / `Wet` / `Deep`. It carves the crater
+into Terrain when you're on terrain.
+
+Particle textures are in `Assets/Anomaly/` (`dust.png`, `grit.png`, `leaf.png`,
+`ring.png`, made by `generate_textures.py`). Upload them to Roblox and paste the ids
+into `TEXTURES` at the top of the builder; without them it uses Roblox's built-in
+smoke for the dust and skips the rest.
+
 ## Assets
 
 `Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,

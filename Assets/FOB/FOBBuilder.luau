@@ -95,7 +95,8 @@ end
 local function rod(parent, name, a, b, t, style)
 	local A = Vector3.new(a.X - 240, a.Y, a.Z - 180)
 	local B = Vector3.new(b.X - 240, b.Y, b.Z - 180)
-	return place(parent, "Part", name, CFrame.lookAt((A + B) / 2, B), Vector3.new(t, t, (B - A).Magnitude), style)
+	local up = math.abs((B - A).Unit.Y) > 0.99 and Vector3.zAxis or Vector3.yAxis
+	return place(parent, "Part", name, CFrame.lookAt((A + B) / 2, B, up), Vector3.new(t, t, (B - A).Magnitude), style)
 end
 
 -- Ring of n segments. skip(angle) = true leaves a gap there (angle 3pi/2 = north).
