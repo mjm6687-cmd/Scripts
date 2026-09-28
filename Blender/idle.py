@@ -41,6 +41,7 @@ def S(x, y, z):
 
 
 ARM_DROP = 0.15  # studs the arms sit lower on the body (matches the walks)
+STANCE = 0.3     # studs each foot sits out to the side (0 = feet together like the default rig)
 LEG = 2.0
 REACH = 1.05 * LEG
 
@@ -58,7 +59,7 @@ def foot(hip, x, y, z):
 
 
 def P(hip=(0, 0, -0.2), lean=8, twist=0, tilt=0, chest=0, chest_twist=0,
-      head=0, head_yaw=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
+      head=0, head_yaw=0, arms=(0, 10), rfoot=(-STANCE, 0, 0), lfoot=(STANCE, 0, 0)):
     """One pose.
     hip: body offset (x, y, z) studs; z stays well below 0 so the knees stay bent
     lean: hips forward lean (LowerTorso-FK)     tilt: hips side tilt, + = toward the character's left     chest: extra chest bend (Torso_FK), negative = puffed back
