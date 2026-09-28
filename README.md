@@ -108,6 +108,16 @@ in **Kohl's Admin > Config > Addons**: `;freezetime`, `;daylength`,
 `;nightlength`, `;season`, `;weather`, `;time`, `;aurora`, `;aurorasurge`,
 `;aurorasurges`.
 
+## FOB / heliport
+
+`Assets/FOB/FOBBuilder.luau` is a **Command Bar** script (View > Command Bar), not
+a script you put in the game. Paste it in and press Enter: it builds the forward
+operating base + heliport as `Workspace > FOB` (walls, towers, gate, tents, TOC,
+motor pool, ammo point, two helipads, flight ops tower, fuel point, aid station,
+roads). Change `ORIGIN` / `YAW` at the top to move or turn it. Running it again
+replaces the old one; Ctrl+Z undoes it. Turn `SHOW_LABELS` off (or delete the
+`BuildLabel` guis) before publishing.
+
 ## Assets
 
 `Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,
