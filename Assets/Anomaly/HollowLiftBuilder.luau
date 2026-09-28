@@ -524,7 +524,9 @@ end
 
 root.WorldPivot = CFrame.new(C)
 root.PrimaryPart = outer
-root:SetAttribute("OrbCentre", lensPos) -- HollowLiftClient orbits the rocks round this
+-- Where the orb is relative to the model's pivot, so it stays right if you
+-- move the model (HollowLiftClient orbits the rocks round it).
+root:SetAttribute("OrbOffset", lensPos - C)
 game:GetService("CollectionService"):AddTag(root, "HollowLift")
 root.Parent = workspace
 

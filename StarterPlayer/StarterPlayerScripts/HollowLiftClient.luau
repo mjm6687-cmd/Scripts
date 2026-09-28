@@ -65,17 +65,18 @@ local function hashRand(seed: number, a: number, b: number): number
 	return a + (b - a) * (x - math.floor(x))
 end
 
--- The orb centre: the builder stores it as an attribute (always there, even
--- before the orb streams in); otherwise the Lens part; otherwise the pivot.
+-- The orb centre, wherever the model has been moved to: the Lens part itself
+-- if it's loaded, otherwise the model's pivot plus the offset the builder
+-- stored (both move with the model), otherwise just the pivot.
 local function centreOf(model: Model): Vector3
-	local c = model:GetAttribute("OrbCentre")
-	if typeof(c) == "Vector3" then
-		return c
-	end
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") and d.Name == "Lens" then
 			return d.Position
 		end
+	end
+	local offset = model:GetAttribute("OrbOffset")
+	if typeof(offset) == "Vector3" then
+		return (model:GetPivot() * CFrame.new(offset)).Position
 	end
 	return model:GetPivot().Position
 end
