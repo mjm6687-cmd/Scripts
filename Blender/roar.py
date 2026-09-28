@@ -1,18 +1,18 @@
-# Heavy roar for the R6 IK/FK Blender rig (v2.22) - same style as walk.py.
+# Heavy roars for the R6 IK/FK Blender rig (v2.22) - same style as walk.py.
 # Run in Blender: Scripting tab > New/Open > Run Script.
-# Creates a one-shot, in-place "Roar" action on __PrimaryArmature:
-#   inhale and rear back -> step in and thrust forward -> roar with a trembling hold
-#   and a slow head sweep -> exhale and settle back to standing.
-# Arms are FK (rotated), legs are IK (foot targets moved).
+# Creates three one-shot, in-place actions on __PrimaryArmature:
+#   Roar_Broadcast  (3.1 s) - big announcing roar: rears up, stomps, head raised and sweeping
+#   Roar_Passive    (1.7 s) - low-key warning roar: no step, small lean, gentle rumble
+#   Roar_Aggressive (1.9 s) - fast threat: coils, lunges a step in, claws forward, violent shake
+# Arms are FK (rotated), legs are IK (foot targets moved). Knees stay bent the whole time.
 import bpy
 import math
 from mathutils import Quaternion, Vector
 
 RIG_NAME = "__PrimaryArmature"
-ACTION_NAME = "Roar"
 HIP_BONE = "LowerTorso-FK"
 HEAD_MOVES = True  # False = never key the head (it just rides on the body like in the walks)
-SPEED = 1.0        # higher = faster roar, lower = slower and heavier
+HEAD_MAX = 18      # most the head ever turns or tilts, in degrees
 
 # Which way the character faces in this rig: -1 = faces -Y, 1 = faces +Y.
 FACING = 1
@@ -57,16 +57,16 @@ def foot(hip, x, y, z):
     return S(x, y, max(z, 0))
 
 
-def P(hip=(0, 0, -0.05), lean=6, twist=0, chest=0, chest_twist=0,
-      head=None, head_yaw=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
+def P(hip=(0, 0, -0.2), lean=8, twist=0, chest=0, chest_twist=0,
+      head=0, head_yaw=0, arms=(0, 10), rfoot=(0, 0, 0), lfoot=(0, 0, 0)):
     """One pose.
-    hip: body offset (x, y, z) studs     lean: hips forward lean (LowerTorso-FK)
-    chest: extra chest bend (Torso_FK), negative = puffed back
-    head: where the head points in the world: 0 = level, negative = looking up
-          (None = leave it level with the body, same as the walks)
+    hip: body offset (x, y, z) studs; z stays well below 0 so the knees stay bent
+    lean: hips forward lean (LowerTorso-FK)     chest: extra chest bend (Torso_FK), negative = puffed back
+    head: head nod on top of the body, negative = looking up   head_yaw: head turn
     arms: (pitch, spread) for both arms: + pitch = back, + spread = out to the sides
     """
-    head_rel = 0 if head is None else head - lean - chest  # undo the body lean
+    head = max(-HEAD_MAX, min(HEAD_MAX, head))
+    head_yaw = max(-HEAD_MAX, min(HEAD_MAX, head_yaw))
     pose = {
         HIP_BONE:      ([(PITCH, lean), (YAW, twist)], S(*hip)),
         "Torso_FK":    ([(PITCH, chest), (YAW, chest_twist)], None),
@@ -76,43 +76,84 @@ def P(hip=(0, 0, -0.05), lean=6, twist=0, chest=0, chest_twist=0,
         "LeftLeg-IK":  ([], foot(hip, *lfoot)),
     }
     if HEAD_MOVES:
-        pose["Head"] = ([(PITCH, head_rel), (YAW, head_yaw)], None)
+        pose["Head"] = ([(PITCH, head), (YAW, head_yaw)], None)
     return pose
 
 
-# --- The roar ------------------------------------------------------------------
-KEYS = [
-    (0.00, P()),                                                        # standing, same as the walk
-    (0.45, P(hip=(0, 0.05, 0.05), lean=0, chest=-8, head=8,             # inhale: chest swells, chin tucks
-             arms=(15, 16))),
-    (0.75, P(hip=(0, 0.10, 0.08), lean=-5, chest=-12, head=-20,         # rear back, right foot lifts
-             arms=(20, 26), rfoot=(0, -0.25, 0.3))),
-    (0.95, P(hip=(0, -0.15, -0.45), lean=24, twist=5, chest=10,         # slam forward: step in, arms fling back
-             chest_twist=-3, head=-12, arms=(38, 40),
-             rfoot=(0, -0.55, 0), lfoot=(0, 0.1, 0))),
-    (1.05, P(hip=(0, -0.17, -0.52), lean=27, twist=5, chest=12,         # overshoot
-             chest_twist=-3, head=-15, arms=(42, 44),
-             rfoot=(0, -0.55, 0), lfoot=(0, 0.1, 0))),
+def hold(t0, t1, step, fade_to, sweep, period, base, shake):
+    """Trembling roar hold. Alternates each shake value +/- and sweeps the head side to side,
+    both fading down to fade_to by the end."""
+    keys, t, i = [], t0, 0
+    while t < t1:
+        fade = 1 - (1 - fade_to) * (t - t0) / (t1 - t0)
+        sign = (1 if i % 2 else -1) * fade
+        kw = dict(base)
+        for name, amp in shake.items():
+            if name == "hip_z":
+                x, y, z = kw["hip"]
+                kw["hip"] = (x, y, z + amp * sign)
+            elif name == "arm":
+                kw["arms"] = (kw["arms"][0] + amp * sign, kw["arms"][1])
+            else:
+                kw[name] = kw[name] + amp * sign
+        kw["head_yaw"] = sweep * fade * math.sin(2 * math.pi * (t - t0) / period)
+        keys.append((t, P(**kw)))
+        t, i = t + step, i + 1
+    return keys
+
+
+# --- Roar 1: broadcast (3.1 s) --------------------------------------------------
+STOMP = dict(rfoot=(0, -0.5, 0), lfoot=(0, 0.1, 0))
+BROADCAST = [
+    (0.00, P()),                                                          # standing
+    (0.45, P(hip=(0, 0.05, -0.25), lean=2, chest=-8, head=8, arms=(15, 16))),       # inhale, chin tucks
+    (0.75, P(hip=(0, 0.08, -0.2), lean=-2, chest=-12, head=-12, arms=(20, 26),      # rear back, foot lifts
+             rfoot=(0, -0.25, 0.25))),
+    (0.95, P(hip=(0, -0.12, -0.5), lean=14, twist=4, chest=-4, head=-18,            # stomp, chest open
+             arms=(30, 38), **STOMP)),
+    (1.05, P(hip=(0, -0.13, -0.56), lean=16, twist=4, chest=-4, head=-18,           # overshoot
+             arms=(34, 42), **STOMP)),
+] + hold(1.12, 2.35, 0.07, 0.4, sweep=15, period=0.9,                             # roar: tremble + head sweep
+         base=dict(hip=(0, -0.13, -0.53), lean=15, twist=4, chest=-4, head=-16, arms=(32, 40), **STOMP),
+         shake=dict(hip_z=0.02, lean=1.2, chest=1.2, head=2)) + [
+    (2.55, P(hip=(0, -0.05, -0.35), lean=12, chest=2, head=12, arms=(5, 12),       # exhale, foot steps back
+             rfoot=(0, -0.3, 0.22))),
+    (2.80, P(hip=(0, 0, -0.22), lean=9, head=3)),                                 # settle
+    (3.10, P()),
 ]
 
-# Roar hold: the whole body trembles and the head sweeps slowly side to side,
-# both fading out as the breath runs out.
-t, i = 1.12, 0
-while t < 2.35:
-    fade = 1 - 0.6 * (t - 1.12) / 1.23
-    shake = (1 if i % 2 else -1) * fade
-    KEYS.append((t, P(hip=(0, -0.16, -0.5 + 0.02 * shake), lean=25 + 1.5 * shake, twist=5,
-                      chest=11 + 1.5 * shake, chest_twist=-3, head=-14 + 3 * shake,
-                      head_yaw=7 * fade * math.sin(2 * math.pi * (t - 1.12) / 0.9),
-                      arms=(40 + 2 * shake, 42), rfoot=(0, -0.55, 0), lfoot=(0, 0.1, 0))))
-    t, i = t + 0.07, i + 1
-
-KEYS += [
-    (2.55, P(hip=(0, -0.05, -0.2), lean=14, chest=4, head=10,           # exhale: head drops, right foot steps back
-             arms=(5, 12), rfoot=(0, -0.3, 0.25))),
-    (2.80, P(hip=(0, 0, -0.02), lean=7, head=2, arms=(0, 10))),         # settle
-    (3.10, P()),                                                        # back to standing
+# --- Roar 2: passive (1.7 s) ---------------------------------------------------
+PASSIVE = [
+    (0.00, P()),
+    (0.30, P(hip=(0, 0.03, -0.24), lean=5, chest=-5, head=6, arms=(6, 13))),        # small breath in
+    (0.50, P(hip=(0, -0.05, -0.3), lean=12, chest=3, head=-8, arms=(10, 15))),      # lean in a little
+] + hold(0.58, 1.25, 0.08, 0.5, sweep=8, period=0.7,                              # low rumble
+         base=dict(hip=(0, -0.05, -0.3), lean=12, chest=3, head=-7, arms=(10, 15)),
+         shake=dict(lean=0.6, head=1.5)) + [
+    (1.45, P(hip=(0, 0, -0.24), lean=9, head=4, arms=(2, 11))),                   # settle
+    (1.70, P()),
 ]
+
+# --- Roar 3: aggressive (1.9 s) ------------------------------------------------
+LUNGE = dict(rfoot=(0, -0.65, 0), lfoot=(0, 0.2, 0))
+AGGRESSIVE = [
+    (0.00, P()),
+    (0.18, P(hip=(0, 0.1, -0.35), lean=4, chest=-6, head=10, arms=(18, 20))),       # coil
+    (0.32, P(hip=(0, 0.05, -0.3), lean=10, chest=-2, head=0, arms=(10, 22),         # foot lifts
+             rfoot=(0, -0.3, 0.25))),
+    (0.42, P(hip=(0, -0.25, -0.6), lean=30, twist=6, chest=8, head=-18,             # lunge in, claws forward
+             arms=(-25, 32), **LUNGE)),
+    (0.50, P(hip=(0, -0.27, -0.66), lean=33, twist=6, chest=8, head=-18,            # overshoot
+             arms=(-30, 36), **LUNGE)),
+] + hold(0.56, 1.45, 0.05, 0.6, sweep=6, period=0.35,                             # violent shake
+         base=dict(hip=(0, -0.26, -0.63), lean=31, twist=6, chest=8, head=-16, arms=(-27, 34), **LUNGE),
+         shake=dict(hip_z=0.03, lean=2, chest=2, head=3, arm=3)) + [
+    (1.60, P(hip=(0, -0.1, -0.4), lean=16, head=8, arms=(0, 14),                  # pull back, foot returns
+             rfoot=(0, -0.35, 0.22))),
+    (1.90, P()),
+]
+
+ROARS = {"Roar_Broadcast": BROADCAST, "Roar_Passive": PASSIVE, "Roar_Aggressive": AGGRESSIVE}
 
 # Arms and head land a moment after the body so the motion has weight.
 LAG = {"Head": 0.04, "RightArm_FK": 0.05, "LeftArm_FK": 0.05}
@@ -132,23 +173,26 @@ def key(bone_name, frame, rots, loc):
         pb.keyframe_insert("location", frame=frame)
 
 
-old = bpy.data.actions.get(ACTION_NAME)
-if old:
-    bpy.data.actions.remove(old)
-action = bpy.data.actions.new(ACTION_NAME)
-action.use_fake_user = True
-rig.animation_data.action = action
-for pb in rig.pose.bones:
-    pb.location = (0, 0, 0)
-    pb.rotation_quaternion = (1, 0, 0, 0)
+for name, keys in ROARS.items():
+    old = bpy.data.actions.get(name)
+    if old:
+        bpy.data.actions.remove(old)
+    action = bpy.data.actions.new(name)
+    action.use_fake_user = True
+    rig.animation_data.action = action
+    for pb in rig.pose.bones:
+        pb.location = (0, 0, 0)
+        pb.rotation_quaternion = (1, 0, 0, 0)
 
-last = len(KEYS) - 1
-for n, (t, pose) in enumerate(KEYS):
-    for bone_name, (rots, loc) in pose.items():
-        lag = LAG.get(bone_name, 0) if 0 < n < last else 0  # first/last keys stay lined up
-        key(bone_name, round((t + lag) / SPEED * FPS), rots, loc)
+    last = len(keys) - 1
+    for n, (t, pose) in enumerate(keys):
+        for bone_name, (rots, loc) in pose.items():
+            lag = LAG.get(bone_name, 0) if 0 < n < last else 0  # first/last keys stay lined up
+            key(bone_name, round((t + lag) * FPS), rots, loc)
+    print("Created action:", name, f"({keys[-1][0]} s)")
 
+rig.animation_data.action = bpy.data.actions["Roar_Broadcast"]
 scene.frame_start = 0
-scene.frame_end = round(KEYS[-1][0] / SPEED * FPS)
+scene.frame_end = round(3.1 * FPS)
 scene.frame_set(0)
-print("Created action:", ACTION_NAME, "| STUD =", STUD)
+print("STUD =", STUD)
