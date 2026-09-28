@@ -1,7 +1,8 @@
-# Heavy crouch walk for the R6 IK/FK Blender rig (v2.22) - same style as walk.py.
+# Heavy crouch walks in 8 directions for the R6 IK/FK Blender rig (v2.22) - same style as walk.py.
 # Run in Blender: Scripting tab > New/Open > Run Script.
-# Creates a looping, in-place "Crouch_Forward" action on __PrimaryArmature.
-# (Directions get added to DIRECTIONS once the forward one looks right.)
+# Creates looping, in-place actions on __PrimaryArmature:
+#   Crouch_Forward, Crouch_Backward, Crouch_Left, Crouch_Right,
+#   Crouch_ForwardLeft, Crouch_ForwardRight, Crouch_BackwardLeft, Crouch_BackwardRight
 # Arms are FK (rotated), legs are IK (foot targets moved). The head is never keyed.
 import bpy
 import math
@@ -125,7 +126,14 @@ LAG = {"RightArm_FK": 0.04, "LeftArm_FK": 0.04}
 
 D = math.sqrt(0.5)
 DIRECTIONS = {  # name: (forward, right)
-    "Crouch_Forward": (1, 0),
+    "Crouch_Forward":       (1, 0),
+    "Crouch_Backward":      (-1, 0),
+    "Crouch_Left":          (0, -1),
+    "Crouch_Right":         (0, 1),
+    "Crouch_ForwardLeft":   (D, -D),
+    "Crouch_ForwardRight":  (D, D),
+    "Crouch_BackwardLeft":  (-D, -D),
+    "Crouch_BackwardRight": (-D, D),
 }
 
 
