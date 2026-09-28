@@ -1,22 +1,23 @@
-# Heavy walk loop for the R6 IK/FK Blender rig (v2.22) - same style as sprint.py.
+# Heavy walk loops in 8 directions for the R6 IK/FK Blender rig (v2.22) - same style as sprint.py.
 # Run in Blender: Scripting tab > New/Open > Run Script.
-# Creates a looping, in-place "Walk_Heavy" action on __PrimaryArmature.
-# Arms are FK (rotated), legs are IK (foot targets moved).
+# Creates looping, in-place actions on __PrimaryArmature:
+#   Walk_Forward, Walk_Backward, Walk_Left, Walk_Right,
+#   Walk_ForwardLeft, Walk_ForwardRight, Walk_BackwardLeft, Walk_BackwardRight
+# Arms are FK (rotated), legs are IK (foot targets moved). The head is never keyed.
 import bpy
 import math
 from mathutils import Quaternion, Vector
 
 RIG_NAME = "__PrimaryArmature"
-ACTION_NAME = "Walk_Heavy"
 HIP_BONE = "LowerTorso-FK"
 CYCLE = 1.3  # seconds for a full stride (right step + left step). Higher = slower, heavier.
 
 # Which way the character faces in this rig: -1 = faces -Y, 1 = faces +Y.
-# If the run goes backwards, flip this number.
+# If the walk goes backwards, flip this number.
 FACING = 1
 
 # Armature-space axes (flipped automatically by FACING).
-PITCH = (-FACING, 0, 0)  # + leans torso/head forward, - swings arms forward
+PITCH = (-FACING, 0, 0)  # + leans torso forward, - swings arms forward
 YAW = (0, 0, 1)          # - turns the chest to the character's right
 ROLL = (0, -FACING, 0)   # + moves right arm outward / tilts torso left
 
@@ -38,84 +39,99 @@ def S(x, y, z):
     return (-x * STUD * FACING, -y * STUD * FACING, z * STUD)
 
 
-# Leg reach limit (studs). Feet are pulled in so the IK never over-stretches.
+ARM_SWING = 0.2   # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
+ARM_DROP = 0.15   # studs the arms sit lower on the body (like grabbing them and pressing G, then moving down)
+ARM_OUT = 10      # degrees the arms sit out from the sides
+SIDE_STRIDE = 0.55  # sideways steps are shorter so the feet never cross
+FOOT_GAP = 0.35     # minimum studs between the feet side to side (R6 feet start 1 stud apart)
 LEG = 2.0
-ARM_SWING = 0.2  # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
-ARM_DROP = 0.15  # studs the arms sit lower on the body (like grabbing them and pressing G, then moving down)
 REACH = 1.05 * LEG  # a touch over LEG: a planted leg reads as straight, not broken
 
 
-def foot(hip, y, z):
-    """Foot target (y, z) in studs, shortened front-to-back if it's out of reach."""
-    hy, hz = hip[1], LEG + hip[2]
+def foot(hip, x, y, z):
+    """Foot offset [x, y, z] in studs, shortened if it's out of reach of the hip."""
+    hx, hy, hz = hip[0], hip[1], LEG + hip[2]
     dz = min(abs(z - hz), REACH)
-    max_dy = math.sqrt(REACH ** 2 - dz ** 2)
-    y = hy + max(-max_dy, min(max_dy, y - hy))
-    return S(0, y, max(z, 0))
+    max_d = math.sqrt(REACH ** 2 - dz ** 2)
+    dx, dy = x - hx, y - hy
+    d = math.hypot(dx, dy)
+    if d > max_d:
+        x, y = hx + dx * max_d / d, hy + dy * max_d / d
+    return [x, y, max(z, 0)]
 
 
-def P(hip, hips, chest, head, arms, rfoot, lfoot):
-    """One pose of the stride.
-    hip:   (x, y, z) body offset in studs      hips:  (lean, twist, tilt) of LowerTorso-FK
-    chest: (bend, twist) extra on Torso_FK       head:  pitch (counters the lean to look ahead)
-    arms:  ((right pitch, roll), (left pitch, roll))   rfoot/lfoot: (y, z) in studs
-    """
+# --- One step, written for whichever foot just landed (the "lead" foot) --------
+# along: foot position along the walking direction in studs (negative = ahead)
+# sway: hip shift over the lead foot   twist: hips turn toward the forward leg
+# tilt: hips drop toward the lead side  arms: (lead-side arm, other arm) swing
+PHASES = [
+    # (time, name)
+    (0.00, dict(z=-0.10, sway=0.02, bend=0, twist=5, chest=-8, tilt=0, chest_bend=0,
+                arms=(20, -25), lead=(-0.80, 0.0), trail=(0.80, 0.10))),   # lead heel plants ahead
+    (0.12, dict(z=-0.22, sway=0.12, bend=3, twist=3, chest=-6, tilt=-4, chest_bend=3,
+                arms=(18, -20), lead=(-0.45, 0.0), trail=(0.45, 0.30))),   # weight drops onto it
+    (0.25, dict(z=-0.02, sway=0.15, bend=0, twist=0, chest=0, tilt=-3, chest_bend=1,
+                arms=(0, -3), lead=(0.05, 0.0), trail=(-0.10, 0.50))),     # body rolls over it
+    (0.38, dict(z=-0.05, sway=0.08, bend=-1, twist=-3, chest=5, tilt=-1, chest_bend=0,
+                arms=(-18, 15), lead=(0.45, 0.0), trail=(-0.60, 0.20))),   # pushes back, other foot reaches
+]
+
+
+def build(ph, lead, fwd, right):
+    """Pose for one phase. lead: 'R' or 'L'. fwd/right: walking direction (-1..1)."""
+    side = 1 if lead == "R" else -1          # flips everything that belongs to the lead side
+    hip = (-ph["sway"] * side, 0, ph["z"])   # x<0 is the character's right
+
+    def place(along, z):
+        # along<0 means ahead in the walking direction
+        return foot(hip, along * right * SIDE_STRIDE, along * fwd, z)
+
+    lead_foot, trail_foot = place(*ph["lead"]), place(*ph["trail"])
+    rfoot, lfoot = (lead_foot, trail_foot) if lead == "R" else (trail_foot, lead_foot)
+    # keep the feet from crossing: right foot sits at x=-0.5, left at +0.5 at rest
+    gap = (0.5 + lfoot[0]) - (-0.5 + rfoot[0])
+    if gap < FOOT_GAP:
+        push = (FOOT_GAP - gap) / 2
+        rfoot[0] -= push
+        lfoot[0] += push
+
+    lead_arm, other_arm = ph["arms"][0] * fwd, ph["arms"][1] * fwd
+    rarm, larm = (lead_arm, other_arm) if lead == "R" else (other_arm, lead_arm)
+
+    lean = 6 + 2 * fwd + ph["bend"]          # a bit less lean walking backwards
+    side_lean = -3 * right                   # lean into sideways travel
     return {
-        HIP_BONE:      ([(PITCH, hips[0]), (YAW, hips[1]), (ROLL, hips[2])], S(*hip)),
-        "Torso_FK":    ([(PITCH, chest[0]), (YAW, chest[1])], None),
-        "Head":        ([(PITCH, head)], None),
-        "RightArm_FK": ([(PITCH, arms[0][0] * ARM_SWING), (ROLL, arms[0][1])], S(0, 0, -ARM_DROP)),
-        "LeftArm_FK":  ([(PITCH, arms[1][0] * ARM_SWING), (ROLL, arms[1][1])], S(0, 0, -ARM_DROP)),
-        "RightLeg-IK": ([], foot(hip, *rfoot)),
-        "LeftLeg-IK":  ([], foot(hip, *lfoot)),
+        HIP_BONE:      ([(PITCH, lean), (YAW, ph["twist"] * side * fwd),
+                         (ROLL, ph["tilt"] * side + side_lean)], S(*hip)),
+        "Torso_FK":    ([(PITCH, ph["chest_bend"]), (YAW, ph["chest"] * side * fwd)], None),
+        "RightArm_FK": ([(PITCH, rarm * ARM_SWING), (ROLL, ARM_OUT)], S(0, 0, -ARM_DROP)),
+        "LeftArm_FK":  ([(PITCH, larm * ARM_SWING), (ROLL, -ARM_OUT)], S(0, 0, -ARM_DROP)),
+        "RightLeg-IK": ([], S(*rfoot)),
+        "LeftLeg-IK":  ([], S(*lfoot)),
     }
 
 
-# --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
-# The main forward lean is on LowerTorso-FK; Torso_FK adds chest bend/twist on top.
-# A walk always has a foot on the ground: less bob and lean than the jog,
-# but a bigger side-to-side weight shift so it lumbers.
-CONTACT = P(  # right heel plants in front, left toe still on the ground behind
-    hip=(-0.02, 0, -0.1), hips=(8, 5, 0), chest=(0, -8), head=-8,
-    arms=((20, 10), (-25, -10)), rfoot=(-0.8, 0), lfoot=(0.8, 0.1))
-
-DOWN = P(  # weight drops onto the right leg: body sinks, hips tilt, head bobs
-    hip=(-0.12, 0.03, -0.22), hips=(11, 3, -4), chest=(3, -6), head=-12,
-    arms=((18, 11), (-20, -11)), rfoot=(-0.45, 0), lfoot=(0.45, 0.3))
-
-PASS = P(  # body rolls up over the right leg, left foot swings through
-    hip=(-0.15, 0, -0.02), hips=(8, 0, -3), chest=(1, 0), head=-9,
-    arms=((0, 10), (-3, -10)), rfoot=(0.05, 0), lfoot=(-0.1, 0.5))
-
-UP = P(  # right leg pushes back, left foot reaches forward
-    hip=(-0.08, -0.03, -0.05), hips=(7, -3, -1), chest=(0, 5), head=-7,
-    arms=((-18, 10), (15, -10)), rfoot=(0.45, 0), lfoot=(-0.6, 0.2))
+def cycle_keys(fwd, right):
+    keys = [(t, build(ph, "R", fwd, right)) for t, ph in PHASES]
+    keys += [(t + 0.5, build(ph, "L", fwd, right)) for t, ph in PHASES]
+    keys.append((1.0, keys[0][1]))
+    return keys
 
 
-def mirror(pose):
-    """Swap left/right so the same step works for the other foot."""
-    out = {}
-    for name, (rots, loc) in pose.items():
-        if "Right" in name:
-            name = name.replace("Right", "Left")
-        elif "Left" in name:
-            name = name.replace("Left", "Right")
-        rots = [(axis, deg if axis == PITCH else -deg) for axis, deg in rots]
-        if loc:
-            loc = (-loc[0], loc[1], loc[2])
-        out[name] = (rots, loc)
-    return out
+# Arms trail the body slightly so they swing with weight instead of snapping.
+LAG = {"RightArm_FK": 0.04, "LeftArm_FK": 0.04}
 
-
-# (fraction of the cycle, pose)
-KEYS = [
-    (0.00, CONTACT), (0.12, DOWN), (0.25, PASS), (0.38, UP),
-    (0.50, mirror(CONTACT)), (0.62, mirror(DOWN)), (0.75, mirror(PASS)), (0.88, mirror(UP)),
-    (1.00, CONTACT),
-]
-
-# Arms and head trail the body slightly so they swing with weight instead of snapping.
-LAG = {"Head": 0.05, "RightArm_FK": 0.04, "LeftArm_FK": 0.04}
+D = math.sqrt(0.5)
+DIRECTIONS = {  # name: (forward, right)
+    "Walk_Forward":       (1, 0),
+    "Walk_Backward":      (-1, 0),
+    "Walk_Left":          (0, -1),
+    "Walk_Right":         (0, 1),
+    "Walk_ForwardLeft":   (D, -D),
+    "Walk_ForwardRight":  (D, D),
+    "Walk_BackwardLeft":  (-D, -D),
+    "Walk_BackwardRight": (-D, D),
+}
 
 
 def key(bone_name, frame, rots, loc):
@@ -143,25 +159,28 @@ def all_fcurves(act):
         yield from act.fcurves
 
 
-old = bpy.data.actions.get(ACTION_NAME)
-if old:
-    bpy.data.actions.remove(old)
-action = bpy.data.actions.new(ACTION_NAME)
-action.use_fake_user = True
-rig.animation_data.action = action
-for pb in rig.pose.bones:
-    pb.location = (0, 0, 0)
-    pb.rotation_quaternion = (1, 0, 0, 0)
+for name, (fwd, right) in DIRECTIONS.items():
+    old = bpy.data.actions.get(name)
+    if old:
+        bpy.data.actions.remove(old)
+    action = bpy.data.actions.new(name)
+    action.use_fake_user = True
+    rig.animation_data.action = action
+    for pb in rig.pose.bones:
+        pb.location = (0, 0, 0)
+        pb.rotation_quaternion = (1, 0, 0, 0)
 
-for t, pose in KEYS:
-    for bone_name, (rots, loc) in pose.items():
-        frame = round((t + LAG.get(bone_name, 0)) * CYCLE * FPS)
-        key(bone_name, frame, rots, loc)
+    for t, pose in cycle_keys(fwd, right):
+        for bone_name, (rots, loc) in pose.items():
+            frame = round((t + LAG.get(bone_name, 0)) * CYCLE * FPS)
+            key(bone_name, frame, rots, loc)
 
-for fc in all_fcurves(action):
-    fc.modifiers.new('CYCLES')  # seamless loop
+    for fc in all_fcurves(action):
+        fc.modifiers.new('CYCLES')  # seamless loop
+    print("Created action:", name)
 
+rig.animation_data.action = bpy.data.actions["Walk_Forward"]
 scene.frame_start = 0
 scene.frame_end = round(CYCLE * FPS) - 1  # last frame = first frame, so skip it when exporting
 scene.frame_set(0)
-print("Created action:", ACTION_NAME, "| STUD =", STUD)
+print("STUD =", STUD)
