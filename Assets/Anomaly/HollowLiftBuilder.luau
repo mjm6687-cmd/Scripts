@@ -26,10 +26,10 @@
 ]]
 
 local TEXTURES = {
-	Dust = "",   -- "rbxassetid://..."  dust.png
-	Grit = "",   -- grit.png
-	Leaf = "",   -- leaf.png
-	Ring = "",   -- ring.png
+	Dust = "rbxassetid://77191088568439", -- dust.png
+	Grit = "rbxassetid://98553926540236", -- grit.png
+	Leaf = "rbxassetid://91534275918577", -- leaf.png
+	Ring = "rbxassetid://85522458077339", -- ring.png
 }
 local HUM_SOUND = ""        -- optional looped hum, "rbxassetid://..."
 
