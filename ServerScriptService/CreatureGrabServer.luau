@@ -2557,11 +2557,12 @@ end
 
 	The Arm system on the creature's client already stops you, but that is just a
 	client that could be modified. This is the check that counts: Grab and Eat are
-	refused while the creature is moving faster than a walk. Drop and CancelEat are
-	always allowed -- letting go should never be blocked.
+	refused while the creature is moving faster than a jog (or a walk, for a
+	creature with no jog). Drop and CancelEat are always allowed -- letting go
+	should never be blocked.
 
 	Measured from the root's velocity (which the server sees), against the rig's
-	own walkSpeed plus slack for lag and the speed ramp.
+	own jogSpeed / walkSpeed plus slack for lag and the speed ramp.
 --]]
 local SPRINT_LOCK_SLACK = 3
 
@@ -2570,7 +2571,8 @@ local function walkSpeedOf(rig: Model): number
 	if module and module:IsA("ModuleScript") then
 		local ok, cfg = pcall(require, module)
 		if ok and typeof(cfg) == "table" and typeof(cfg.walkSpeed) == "number" then
-			return cfg.walkSpeed
+			local jog = typeof(cfg.jogSpeed) == "number" and cfg.jogSpeed or 0
+			return math.max(cfg.walkSpeed, jog)
 		end
 	end
 	return 9

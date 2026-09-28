@@ -445,12 +445,19 @@ local function playSyntheticDistant(template: Sound, parent: BasePart, cfg, pitc
 end
 
 --[[
-	ROAR ANIMATIONS ? one per roar.
+	ROAR ANIMATIONS ? two per roar.
 
-	    Roar1, Roar2, Roar3     in the rig's Animations folder
-	    (falls back to a single "Roar" if a numbered one is missing)
+	    Roar1, Roar2, Roar3                    standing: full body, legs included
+	    Roar1Moving, Roar2Moving, Roar3Moving  on the move: head and arms ONLY
+	    (either falls back to a single "Roar" if a numbered one is missing)
 
-	The Idle/Moving split is gone. ONE clip now plays whether you're standing or
+	Standing still you get the full-body clip, and because it keys the legs it
+	ROOTS you for its length (RoarLocked) ? otherwise walking during it would
+	skate. Moving you get the upper-body clip, which leaves the legs to the walk
+	cycle and never locks. A rig with only RoarN (no Moving variant) plays that one
+	clip both ways:
+
+	With no Moving variant, ONE clip plays whether you're standing or
 	walking, which changes what the clip has to be: author it with NO KEYFRAMES ON
 	THE LEGS. Then the walk cycle keeps driving them underneath and the two blend
 	on their own ? that's a property of the animation data, not something the code
@@ -467,10 +474,18 @@ end
 local ROAR_PRIORITY_UPPER = Enum.AnimationPriority.Action2
 local ROAR_PRIORITY_FULL = Enum.AnimationPriority.Action3
 
+local function findAnim(folder: Instance, name: string): Animation?
+	local a = folder:FindFirstChild(name)
+	if a and a:IsA("Animation") then
+		return a
+	end
+	return nil
+end
+
 local function pickRoarAnim(folder: Instance, index: number)
 	for _, name in ipairs({ "Roar" .. index, "Roar" }) do
-		local a = folder:FindFirstChild(name)
-		if a and a:IsA("Animation") then
+		local a = findAnim(folder, name)
+		if a then
 			return a, name
 		end
 	end
@@ -478,7 +493,7 @@ local function pickRoarAnim(folder: Instance, index: number)
 end
 
 -- Returns the track and whether it should lock movement.
-local function playRoarAnimation(rig: Model, index: number, lockMovement: boolean)
+local function playRoarAnimation(rig: Model, index: number, lockMovement: boolean, moving: boolean)
 	local hum = rig:FindFirstChildOfClass("Humanoid")
 	local animator = hum and hum:FindFirstChildOfClass("Animator")
 	local folder = rig:FindFirstChild("Animations")
@@ -486,7 +501,18 @@ local function playRoarAnimation(rig: Model, index: number, lockMovement: boolea
 		return nil, false
 	end
 
-	local anim = pickRoarAnim(folder, index)
+	-- A rig with a Moving variant has a full-body standing clip: moving plays the
+	-- upper-body one, standing plays the full one and roots you for it.
+	local movingAnim = findAnim(folder, "Roar" .. index .. "Moving")
+	local anim
+	if movingAnim and moving then
+		anim = movingAnim
+	else
+		anim = pickRoarAnim(folder, index)
+		if movingAnim and anim then
+			lockMovement = true
+		end
+	end
 	if not anim then
 		return nil, false
 	end
@@ -653,10 +679,16 @@ local function doRoar(rig: Model, index: number, movingHint: boolean?)
 		end
 	end
 
-	-- One clip per roar, played the same way standing or moving. movingHint still
-	-- arrives from the client and is still accepted by the remote, but nothing
-	-- reads it any more ? the animation no longer depends on what you're doing.
-	local track, shouldLock = playRoarAnimation(rig, index, cfg.roarLockMovement == true)
+	-- Moving or standing picks RoarNMoving vs RoarN. The client says which (it's
+	-- the only side that knows CreatureMoving, coast-to-stop included); without
+	-- that, the root's speed decides.
+	local moving = movingHint
+	if moving == nil then
+		local root = rig:FindFirstChild("HumanoidRootPart")
+		local v = root and root.AssemblyLinearVelocity or Vector3.zero
+		moving = Vector3.new(v.X, 0, v.Z).Magnitude > 1
+	end
+	local track, shouldLock = playRoarAnimation(rig, index, cfg.roarLockMovement == true, moving)
 
 	if shouldLock then
 		-- Length can read 0 before the asset has loaded, so the lock falls back to

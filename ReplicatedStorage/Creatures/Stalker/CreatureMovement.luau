@@ -3,8 +3,10 @@
 -- PLACE IN: the creature rig Model (direct child, sibling of Humanoid)
 --
 -- Ported from CharacterMovement with everything the creature doesn't have removed:
--- no crouch, no prone, no sprint, no stamina, no jumping, no swimming, no sitting,
--- no weapons, no BridgeNet / SPH_Assets / GameConfig dependencies. Fully standalone.
+-- no prone, no stamina, no jumping, no swimming, no sitting, no weapons, no
+-- BridgeNet / SPH_Assets / GameConfig dependencies. Fully standalone.
+--
+-- Gaits: walk, jog (X toggles), sprint (hold Shift), crouch (Ctrl toggles).
 --
 -- What it keeps from the original:
 --   * raw WASD tracking + camera-relative move direction
@@ -12,8 +14,8 @@
 --   * accel / decel WalkSpeed ramping with coast-to-stop
 --   * directional momentum in first person / shift lock
 --   * body lean and terrain alignment through RootJoint.C0
---   * 8-way directional walk anims with speed-matched playback
---   * turn-in-place anims driven by accumulated yaw
+--   * 8-way directional walk and crouch anims with speed-matched playback
+--   * turn-in-place anims driven by accumulated yaw (standing and crouched)
 --   * uphill slope slowdown
 --   * falling / landing anims and the landing momentum kill
 --   * idle emotes
@@ -193,6 +195,14 @@ local TUNE = {
 	sprintSlopeCutoff = config.sprintSlopeCutoffAngle or 30,
 	sprintMinSpeedToStart = config.sprintMinSpeedToStart or 3,
 
+	-- Jog (X toggles) and crouch (Ctrl toggles).
+	jogSpeed = config.jogSpeed or 16,
+	accelJog = config.accelJog or 16,
+	decelJog = config.decelJog or 22,
+	jogLeanMult = config.jogLeanMult or 1.25,
+	crouchSpeed = config.crouchSpeed or 5,
+	crouchLeanMult = config.crouchLeanMult or 0.6,
+
 	lastMoveDir = Vector3.zero,
 }
 TUNE.slopeRayParams = RaycastParams.new()
@@ -267,6 +277,9 @@ local moving = false
 local strafing = false
 local sprinting = false      -- actually sprinting right now
 local holdingSprint = false  -- the key is down; sprint may still be refused
+local jogToggled = false     -- X is toggled on; jog may still be refused
+local jogging = false        -- actually jogging right now
+local crouching = false      -- Ctrl toggle
 local smoothedSpeed = 0
 local smoothedWishDir = Vector3.zero
 local smoothedMoveDir = Vector3.zero
@@ -355,55 +368,120 @@ local movPriority = config.useHigherAnimPriority and Enum.AnimationPriority.Acti
 local idlePriority = config.useHigherAnimPriority and Enum.AnimationPriority.Action or Enum.AnimationPriority.Idle
 local fallPriority = config.useHigherAnimPriority and Enum.AnimationPriority.Action3 or Enum.AnimationPriority.Action2
 
-local function loadAnim(name: string, looped: boolean, priority): AnimationTrack?
+-- Takes several names and loads the first one found, so the rig's Animations
+-- folder can use either the current names or the older ones.
+local function loadAnim(names: string | { string }, looped: boolean, priority): AnimationTrack?
 	if not animFolder then
 		return nil
 	end
-	local a = animFolder:FindFirstChild(name)
-	if not a or not a:IsA("Animation") then
-		return nil
+	if typeof(names) == "string" then
+		names = { names }
 	end
-	local track = animator:LoadAnimation(a)
-	track.Looped = looped
-	track.Priority = priority
-	return track
+	for _, name in ipairs(names :: { string }) do
+		local a = animFolder:FindFirstChild(name)
+		if a and a:IsA("Animation") then
+			local track = animator:LoadAnimation(a)
+			track.Looped = looped
+			track.Priority = priority
+			return track
+		end
+	end
+	return nil
 end
 
+--[[
+	ANIMATION NAMES (Animation objects in the rig's Animations folder).
+	The first name in each list is the current one; the rest are older names.
+
+	  Idle, Jog, Sprint, Fall, Land, TurnLeft, TurnRight
+	  WalkForward, WalkBackward, WalkLeft, WalkRight,
+	  WalkForwardLeft, WalkForwardRight, WalkBackwardLeft, WalkBackwardRight
+	  CrouchIdle, CrouchTurnLeft, CrouchTurnRight
+	  CrouchForward, CrouchBackward, CrouchLeft, CrouchRight,
+	  CrouchForwardLeft, CrouchForwardRight, CrouchBackwardLeft, CrouchBackwardRight
+	  IdleEmote1, IdleEmote2, ...   (optional)
+	  Roar1-3 / Roar1Moving-3Moving are played by CreatureRoarServer, not here.
+--]]
 local ANIM = {
-	idle = loadAnim("StandingIdle", true, idlePriority),
+	idle = loadAnim({ "Idle", "StandingIdle" }, true, idlePriority),
 	forward = loadAnim("WalkForward", true, movPriority),
 	backward = loadAnim("WalkBackward", true, movPriority),
 	left = loadAnim("WalkLeft", true, movPriority),
 	right = loadAnim("WalkRight", true, movPriority),
-	leftDiag = loadAnim("WalkLeftDiagonal", true, movPriority),
-	leftDiagRev = loadAnim("WalkLeftDiagonalReverse", true, movPriority),
-	rightDiag = loadAnim("WalkRightDiagonal", true, movPriority),
-	rightDiagRev = loadAnim("WalkRightDiagonalReverse", true, movPriority),
+	leftDiag = loadAnim({ "WalkForwardLeft", "WalkLeftDiagonal" }, true, movPriority),
+	leftDiagRev = loadAnim({ "WalkBackwardLeft", "WalkLeftDiagonalReverse" }, true, movPriority),
+	rightDiag = loadAnim({ "WalkForwardRight", "WalkRightDiagonal" }, true, movPriority),
+	rightDiagRev = loadAnim({ "WalkBackwardRight", "WalkRightDiagonalReverse" }, true, movPriority),
+	jog = loadAnim("Jog", true, movPriority),
 	sprint = loadAnim("Sprint", true, movPriority),
-	turnIn = loadAnim("TurnInIdle", true, movPriority),
-	turnOut = loadAnim("TurnOutIdle", true, movPriority),
-	falling = loadAnim("Falling", true, fallPriority),
-	landing = loadAnim("Landing", false, fallPriority),
+	-- yaw increasing = turning left
+	turnLeft = loadAnim({ "TurnLeft", "TurnInIdle" }, true, movPriority),
+	turnRight = loadAnim({ "TurnRight", "TurnOutIdle" }, true, movPriority),
+	falling = loadAnim({ "Fall", "Falling" }, true, fallPriority),
+	landing = loadAnim({ "Land", "Landing" }, false, fallPriority),
+
+	crouchIdle = loadAnim("CrouchIdle", true, idlePriority),
+	crouchTurnLeft = loadAnim("CrouchTurnLeft", true, movPriority),
+	crouchTurnRight = loadAnim("CrouchTurnRight", true, movPriority),
+	crouchForward = loadAnim("CrouchForward", true, movPriority),
+	crouchBackward = loadAnim("CrouchBackward", true, movPriority),
+	crouchLeft = loadAnim("CrouchLeft", true, movPriority),
+	crouchRight = loadAnim("CrouchRight", true, movPriority),
+	crouchLeftDiag = loadAnim("CrouchForwardLeft", true, movPriority),
+	crouchLeftDiagRev = loadAnim({ "CrouchBackwardLeft", "CrouchBackwardsLeft" }, true, movPriority),
+	crouchRightDiag = loadAnim("CrouchForwardRight", true, movPriority),
+	crouchRightDiagRev = loadAnim({ "CrouchBackwardRight", "CrouchBackwardsRight" }, true, movPriority),
+}
+
+-- The same 8 directions for each set, in the order GetDirectionalAnim picks them.
+local WALK_SET = {
+	forward = ANIM.forward, backward = ANIM.backward, left = ANIM.left, right = ANIM.right,
+	leftDiag = ANIM.leftDiag, leftDiagRev = ANIM.leftDiagRev,
+	rightDiag = ANIM.rightDiag, rightDiagRev = ANIM.rightDiagRev,
+}
+local CROUCH_SET = {
+	forward = ANIM.crouchForward, backward = ANIM.crouchBackward,
+	left = ANIM.crouchLeft, right = ANIM.crouchRight,
+	leftDiag = ANIM.crouchLeftDiag, leftDiagRev = ANIM.crouchLeftDiagRev,
+	rightDiag = ANIM.crouchRightDiag, rightDiagRev = ANIM.crouchRightDiagRev,
 }
 
 local allWalkAnims = {}
+local allCrouchAnims = {}
 for _, key in ipairs({ "forward", "backward", "left", "right", "leftDiag", "leftDiagRev", "rightDiag", "rightDiagRev" }) do
-	if ANIM[key] then
-		table.insert(allWalkAnims, ANIM[key])
+	if WALK_SET[key] then
+		table.insert(allWalkAnims, WALK_SET[key])
+	end
+	if CROUCH_SET[key] then
+		table.insert(allCrouchAnims, CROUCH_SET[key])
 	end
 end
 
--- Everything that can be the current movement animation, sprint included. The
--- stop-all pass has to cover the sprint cycle too, or crossing the sprint
--- threshold leaves the walk cycle playing underneath it.
+-- Everything that can be the current movement animation. The stop-all pass has
+-- to cover every one of them, or switching gait leaves the old cycle playing
+-- underneath the new one.
 local allMoveAnims = table.clone(allWalkAnims)
+for _, t in ipairs(allCrouchAnims) do
+	table.insert(allMoveAnims, t)
+end
+if ANIM.jog then
+	table.insert(allMoveAnims, ANIM.jog)
+end
 if ANIM.sprint then
 	table.insert(allMoveAnims, ANIM.sprint)
 end
 
 local allTurnAnims = {}
-if ANIM.turnIn then table.insert(allTurnAnims, ANIM.turnIn) end
-if ANIM.turnOut then table.insert(allTurnAnims, ANIM.turnOut) end
+for _, key in ipairs({ "turnLeft", "turnRight", "crouchTurnLeft", "crouchTurnRight" }) do
+	if ANIM[key] then
+		table.insert(allTurnAnims, ANIM[key])
+	end
+end
+
+local crouchAnimSet = {}
+for _, t in ipairs(allCrouchAnims) do
+	crouchAnimSet[t] = true
+end
 
 local baseAnimSpeed = config.walkAnimSpeed or 1.0
 local walkAnimSpeedMap = {}
@@ -501,7 +579,11 @@ local function UpdateTilt(deltaTime: number)
 		-- Sprinting leans the body further into the movement. A heavy thing throws
 		-- its mass forward to accelerate; this is the most readable single cue
 		-- that the creature is now committed to a direction.
-		local tiltAmount = maxTiltAngle * (sprinting and TUNE.sprintLeanMult or 1)
+		local leanMult = (sprinting and TUNE.sprintLeanMult)
+			or (jogging and TUNE.jogLeanMult)
+			or (crouching and TUNE.crouchLeanMult)
+			or 1
+		local tiltAmount = maxTiltAngle * leanMult
 		local md = rootPart.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
 		leanTarget = CFrame.Angles(math.rad(-md.Z) * tiltAmount, math.rad(-md.X) * tiltAmount, 0)
 	end
@@ -538,13 +620,16 @@ local function shouldUseSprintAnim(): boolean
 		return false
 	end
 
+	-- Measured up from the jog when there is one, so a steady jog at jogSpeed
+	-- never trips into the sprint clip.
 	local walkSpeed = config.walkSpeed or 9
-	if smoothedSpeed < walkSpeed then
-		return false -- still winding up; the walk cycle owns this
+	local base = ANIM.jog and TUNE.jogSpeed or walkSpeed
+	if smoothedSpeed < base then
+		return false -- still winding up; the walk / jog cycle owns this
 	end
 
 	local blend = config.sprintAnimBlendPoint or 0.4
-	local threshold = walkSpeed + (TUNE.sprintSpeed - walkSpeed) * blend
+	local threshold = base + (TUNE.sprintSpeed - base) * blend
 
 	--[[
 		SPEED DECIDES, NOT THE SHIFT KEY.
@@ -562,19 +647,44 @@ local function shouldUseSprintAnim(): boolean
 	return smoothedSpeed > threshold
 end
 
+-- Same idea one gear down: the Jog clip takes over from the walk cycle once the
+-- speed is actually jog-like, with the same hysteresis.
+local function shouldUseJogAnim(): boolean
+	if not ANIM.jog then
+		return false
+	end
+	local walkSpeed = config.walkSpeed or 9
+	local blend = config.jogAnimBlendPoint or 0.5
+	local threshold = walkSpeed + (TUNE.jogSpeed - walkSpeed) * blend
+	if currentWalkAnim == ANIM.jog then
+		return smoothedSpeed > threshold - 1.5
+	end
+	return smoothedSpeed > threshold
+end
+
 local function GetDirectionalAnim(): AnimationTrack?
 	if humanoid.MoveDirection.Magnitude == 0 then
 		return nil
 	end
 
-	if shouldUseSprintAnim() then
-		return ANIM.sprint
+	-- Crouched: the crouch set, whatever the speed (it can't jog or sprint).
+	-- Falls back to the walk set for any direction without a crouch clip.
+	local set = WALK_SET
+	if crouching and CROUCH_SET.forward then
+		set = CROUCH_SET
+	else
+		if shouldUseSprintAnim() then
+			return ANIM.sprint
+		end
+		if shouldUseJogAnim() then
+			return ANIM.jog
+		end
 	end
 
 	-- Third person: the body always turns to face where it's going, so only the
 	-- forward cycle ever makes sense. Strafe cycles are a first-person thing.
 	if not IsBodyLockedToCamera() then
-		return ANIM.forward
+		return set.forward or ANIM.forward
 	end
 
 	local rel = rootPart.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
@@ -583,18 +693,18 @@ local function GetDirectionalAnim(): AnimationTrack?
 		angle += 360
 	end
 
-	local chosen
-	if angle >= 337.5 or angle < 22.5 then       chosen = ANIM.forward
-	elseif angle >= 22.5  and angle < 67.5 then  chosen = ANIM.rightDiag
-	elseif angle >= 67.5  and angle < 112.5 then chosen = ANIM.right
-	elseif angle >= 112.5 and angle < 157.5 then chosen = ANIM.rightDiagRev
-	elseif angle >= 157.5 and angle < 202.5 then chosen = ANIM.backward
-	elseif angle >= 202.5 and angle < 247.5 then chosen = ANIM.leftDiagRev
-	elseif angle >= 247.5 and angle < 292.5 then chosen = ANIM.left
-	else                                          chosen = ANIM.leftDiag
+	local key
+	if angle >= 337.5 or angle < 22.5 then       key = "forward"
+	elseif angle >= 22.5  and angle < 67.5 then  key = "rightDiag"
+	elseif angle >= 67.5  and angle < 112.5 then key = "right"
+	elseif angle >= 112.5 and angle < 157.5 then key = "rightDiagRev"
+	elseif angle >= 157.5 and angle < 202.5 then key = "backward"
+	elseif angle >= 202.5 and angle < 247.5 then key = "leftDiagRev"
+	elseif angle >= 247.5 and angle < 292.5 then key = "left"
+	else                                          key = "leftDiag"
 	end
 
-	return chosen or ANIM.forward
+	return set[key] or WALK_SET[key] or set.forward or ANIM.forward
 end
 
 -- Playback is tied to actual WalkSpeed, so the SAME walk cycle covers walking,
@@ -609,6 +719,13 @@ local function getAnimPlaybackSpeed(target: AnimationTrack): number
 	-- Dividing it by walkSpeed like the walk cycles would play it ~1.6x too fast.
 	if target == ANIM.sprint then
 		return (humanoid.WalkSpeed / TUNE.sprintSpeed) * (config.sprintAnimSpeed or 1.0)
+	end
+	-- The Jog and Crouch clips are authored at their own speeds, same idea.
+	if target == ANIM.jog then
+		return (humanoid.WalkSpeed / TUNE.jogSpeed) * (config.jogAnimSpeed or 1.0)
+	end
+	if crouchAnimSet[target] then
+		return (humanoid.WalkSpeed / TUNE.crouchSpeed) * (config.crouchAnimSpeed or 1.0)
 	end
 
 	local walkSpeed = config.walkSpeed or 9
@@ -698,7 +815,12 @@ local function UpdateTurnAnim(yawDelta: number, dt: number)
 	local now = os.clock()
 	if math.abs(accumulatedYaw) >= TURN_YAW_THRESHOLD then
 		lastTurnDetectedAt = now
-		local target = (accumulatedYaw > 0) and ANIM.turnIn or ANIM.turnOut
+		local target
+		if crouching and ANIM.crouchTurnLeft then
+			target = (accumulatedYaw > 0) and ANIM.crouchTurnLeft or ANIM.crouchTurnRight
+		else
+			target = (accumulatedYaw > 0) and ANIM.turnLeft or ANIM.turnRight
+		end
 		if not target then
 			StopAllTurnAnims(0.15)
 			return
@@ -779,9 +901,44 @@ ContextActionService:BindActionAtPriority("Creature_Sprint", function(_, inputSt
 	return Enum.ContextActionResult.Pass
 end, false, 2000, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
 
+-- =====================
+-- JOG / CROUCH INPUT
+-- =====================
+-- Both are toggles. Crouching turns the jog off; jogging (X) while crouched
+-- stands you up. Same leak guard as sprint: a leaked binding passes the key on.
+ContextActionService:BindActionAtPriority("Creature_Jog", function(_, inputState)
+	if not isActiveBody() then
+		return Enum.ContextActionResult.Pass
+	end
+	if inputState == Enum.UserInputState.Begin then
+		if crouching then
+			crouching = false
+			jogToggled = true
+		else
+			jogToggled = not jogToggled
+		end
+	end
+	return Enum.ContextActionResult.Sink
+end, false, 2000, Enum.KeyCode.X, Enum.KeyCode.ButtonY)
+
+ContextActionService:BindActionAtPriority("Creature_Crouch", function(_, inputState)
+	if not isActiveBody() then
+		return Enum.ContextActionResult.Pass
+	end
+	if inputState == Enum.UserInputState.Begin then
+		crouching = not crouching
+		if crouching then
+			jogToggled = false
+		end
+	end
+	return Enum.ContextActionResult.Sink
+end, false, 2000, Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl, Enum.KeyCode.ButtonB)
+
 smoothedSpeed = humanoid.WalkSpeed
 character:SetAttribute("CreatureMoving", false)
 character:SetAttribute("CreatureSprinting", false)
+character:SetAttribute("CreatureJogging", false)
+character:SetAttribute("CreatureCrouching", false)
 
 -- =====================
 -- MAIN LOOP
@@ -831,9 +988,16 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 	-- Carrying somebody (CreatureGrabbing is set by the server and replicates):
 	-- no sprinting at all while they're in your hand.
 	local carrying = character:GetAttribute("CreatureGrabbing") == true
+	local throwAiming = character:GetAttribute("ThrowAiming") == true
+
+	-- Aiming a throw drops you to a walk and turns the jog off.
+	if throwAiming then
+		jogToggled = false
+	end
 
 	local wantsSprint = holdingSprint
 		and not carrying
+		and not crouching
 		and inputMag > 0
 		and not landingLocked
 		and not roarLocked
@@ -850,8 +1014,28 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 		sprinting = false
 	end
 
+	-- Jog: carrying is fine (you can grab and eat at a jog); sideways and
+	-- backwards aren't -- strafing falls back to the walk speed.
+	jogging = jogToggled
+		and not sprinting
+		and not crouching
+		and not throwAiming
+		and inputMag > 0
+		and not landingLocked
+		and not roarLocked
+		and not strafing
+
 	-- ---- WalkSpeed accel / decel ----
-	local targetSpeed = sprinting and TUNE.sprintSpeed or (config.walkSpeed or 9)
+	local targetSpeed
+	if crouching then
+		targetSpeed = TUNE.crouchSpeed
+	elseif sprinting then
+		targetSpeed = TUNE.sprintSpeed
+	elseif jogging then
+		targetSpeed = TUNE.jogSpeed
+	else
+		targetSpeed = config.walkSpeed or 9
+	end
 
 	if strafing then
 		targetSpeed *= TUNE.strafeMult
@@ -860,7 +1044,7 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 	-- Aiming a throw (and through the wind-up and throw itself): slowed right
 	-- down. ThrowAiming is set by the Arm system on this same client. It goes
 	-- through the normal decel ramp, so you slow into the aim rather than stopping.
-	if character:GetAttribute("ThrowAiming") == true then
+	if throwAiming then
 		targetSpeed *= TUNE.aimSpeedMult
 	end
 
@@ -880,14 +1064,20 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 	-- decel and the creature stops on a dime, which throws away the weight the
 	-- wind-up just built. Anything above walk speed is still carrying sprint
 	-- momentum and coasts like it.
+	-- Same for the jog: above jog speed you coast like a sprint, between walk
+	-- and jog speed like a jog.
 	local walkSpeed = config.walkSpeed or 9
-	local carryingSprintMomentum = sprinting or smoothedSpeed > walkSpeed + 0.1
+	local jogTop = ANIM.jog and TUNE.jogSpeed or walkSpeed
+	local carryingSprintMomentum = sprinting or smoothedSpeed > jogTop + 0.1
+	local carryingJogMomentum = jogging or smoothedSpeed > walkSpeed + 0.1
 
 	local rate
 	if targetSpeed > smoothedSpeed then
-		rate = sprinting and TUNE.accelSprint or TUNE.accel
+		rate = (sprinting and TUNE.accelSprint) or (jogging and TUNE.accelJog) or TUNE.accel
 	else
-		rate = carryingSprintMomentum and TUNE.decelSprint or TUNE.decel
+		rate = (carryingSprintMomentum and TUNE.decelSprint)
+			or (carryingJogMomentum and TUNE.decelJog)
+			or TUNE.decel
 	end
 
 	if landingLocked then
@@ -901,6 +1091,8 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 	humanoid.WalkSpeed = smoothedSpeed
 
 	character:SetAttribute("CreatureSprinting", sprinting)
+	character:SetAttribute("CreatureJogging", jogging)
+	character:SetAttribute("CreatureCrouching", crouching)
 
 	-- ---- turning + humanoid:Move override ----
 	--
@@ -1088,17 +1280,24 @@ loopConn = RunService.RenderStepped:Connect(function(deltaTime)
 	-- ---- animations ----
 	UpdateWalkAnim()
 
-	if ANIM.idle then
-		if not moving and not ANIM.idle.IsPlaying then
-			ANIM.idle:Play(TUNE.blend)
-		elseif moving and ANIM.idle.IsPlaying then
-			ANIM.idle:Stop(TUNE.blend)
+	-- Standing still: Idle, or CrouchIdle while crouched (Idle if there isn't one).
+	do
+		local wantIdle = (crouching and ANIM.crouchIdle) or ANIM.idle
+		for _, idleTrack in ipairs({ ANIM.idle, ANIM.crouchIdle }) do
+			if idleTrack then
+				local want = idleTrack == wantIdle and not moving
+				if want and not idleTrack.IsPlaying then
+					idleTrack:Play(TUNE.blend)
+				elseif not want and idleTrack.IsPlaying then
+					idleTrack:Stop(TUNE.blend)
+				end
+			end
 		end
 	end
 
-	-- idle emotes
+	-- idle emotes (standing only, not crouched)
 	if #idleEmoteAnims > 0 then
-		if not moving and not IsAirborne() then
+		if not moving and not crouching and not IsAirborne() then
 			if currentIdleEmote then
 				if not currentIdleEmote.IsPlaying then
 					currentIdleEmote = nil
@@ -1184,13 +1383,19 @@ humanoid.Died:Connect(function()
 	moving = false
 	sprinting = false
 	holdingSprint = false
+	jogToggled, jogging, crouching = false, false, false
 	character:SetAttribute("CreatureSprinting", false)
+	character:SetAttribute("CreatureJogging", false)
+	character:SetAttribute("CreatureCrouching", false)
 	ContextActionService:UnbindAction("Creature_Sprint")
+	ContextActionService:UnbindAction("Creature_Jog")
+	ContextActionService:UnbindAction("Creature_Crouch")
 	idlePivoting = false
 	landingLocked = false
 	StopAllTurnAnims(0)
 	StopAllAnims(allMoveAnims, nil, 0.1)
 	if ANIM.idle then ANIM.idle:Stop(0.1) end
+	if ANIM.crouchIdle then ANIM.crouchIdle:Stop(0.1) end
 	if ANIM.falling then ANIM.falling:Stop(0) end
 	if ANIM.landing then ANIM.landing:Stop(0) end
 	if currentIdleEmote then currentIdleEmote:Stop(0) end
@@ -1205,6 +1410,8 @@ character.AncestryChanged:Connect(function(_, parent)
 	if not parent then
 		ContextActionService:UnbindAction("Creature_BlockJump")
 		ContextActionService:UnbindAction("Creature_Sprint")
+		ContextActionService:UnbindAction("Creature_Jog")
+		ContextActionService:UnbindAction("Creature_Crouch")
 		if loopConn then
 			loopConn:Disconnect()
 		end

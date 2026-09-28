@@ -67,6 +67,9 @@ local DEFAULTS = {
 	-- No grabbing or eating above this. Read from the same walkSpeed the movement
 	-- uses, so "walking" means the same thing in both places.
 	walkSpeed = 9,
+	-- Jogging (X) still leaves the arm free, so the limit is the jog speed when
+	-- the creature has one. Only sprinting locks the arm.
+	jogSpeed = 0,
 
 	-- THROW. Must match CreatureGrabServer's THROW_DEFAULTS (both read these same
 	-- keys out of CreatureConfig), or the drawn arc won't be where they land.
@@ -1073,7 +1076,7 @@ function System.update(dt: number)
 			local v = root and root.AssemblyLinearVelocity or Vector3.zero
 			local speed = Vector3.new(v.X, 0, v.Z).Magnitude
 			armFree = rig:GetAttribute("CreatureSprinting") ~= true
-				and speed <= cfg.walkSpeed + WALK_SPEED_SLACK
+				and speed <= math.max(cfg.walkSpeed, cfg.jogSpeed) + WALK_SPEED_SLACK
 		end
 		-- ---- throw animation clock ----
 		-- Local: our own predicted start. Everyone else: the server's ThrowStart.

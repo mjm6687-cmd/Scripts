@@ -43,10 +43,33 @@ return {
 	-- =====================
 	-- SPEED
 	-- =====================
-	walkSpeed = 9,             -- the creature's only movement speed
+	walkSpeed = 9,             -- normal movement speed (WalkForward etc.)
 	accelWalk = 20,            -- studs/s^2 ramp up   (lower = heavier wind-up)
 	decelWalk = 26,            -- studs/s^2 ramp down (lower = longer coast)
 	speedSnapThreshold = 0.5,  -- below this while stopping, snap to 0
+
+	-- =====================
+	-- JOG  (X toggles)
+	-- =====================
+	-- The in-between gait. Toggled, not held. You can still grab and eat while
+	-- jogging (the arm only locks at sprint speed); aiming a throw drops you
+	-- back to a walk and turns the jog off. No jogging sideways or backwards --
+	-- strafing falls back to the walk speed. Shift from a jog goes to a sprint.
+	jogSpeed = 16,
+	accelJog = 16,             -- studs/s^2 ramp up to jog speed
+	decelJog = 22,             -- studs/s^2 ramp down while above walk speed
+	jogAnimSpeed = 1.0,        -- playback rate of the Jog clip at full jog speed
+	jogAnimBlendPoint = 0.5,   -- 0-1 between walk and jog speed: where the Jog clip takes over
+	jogLeanMult = 1.25,        -- body lean while jogging (sprint uses sprintLeanMult)
+
+	-- =====================
+	-- CROUCH  (Ctrl toggles)
+	-- =====================
+	-- Slow and silent: crouch clips play no footsteps. Crouching turns the jog
+	-- off and blocks sprinting; pressing X while crouched stands up and jogs.
+	crouchSpeed = 5,
+	crouchAnimSpeed = 1.0,     -- playback rate of the Crouch clips at full crouch speed
+	crouchLeanMult = 0.6,      -- less body lean while crouched
 
 	-- =====================
 	-- SPRINT  (hold Shift)
@@ -54,7 +77,7 @@ return {
 	-- Same walk animation and same footstep clips ? only faster, lower and
 	-- heavier. Everything here is deliberately WORSE than the walk equivalent;
 	-- that gap is what the weight is made of.
-	sprintSpeed = 26,  -- was 19 (briefly 35)
+	sprintSpeed = 27,  -- was 26 (19, briefly 35)
 
 	accelSprint = 13,   -- was 9. Reaches 26 in roughly 1.3s
 	-- a visible wind-up instead of an instant snap.
@@ -75,31 +98,11 @@ return {
 	-- An Animation named "Sprint" in the rig's Animations folder. With one there,
 	-- it plays instead of the walk cycle while sprinting. Without one, the walk
 	-- cycle speeds up to cover it and everything still works.
-	--[[
-		Playback multiplier for the Sprint cycle at full sprint speed.
-
-		2.1 BECAUSE YOUR SPRINT CLIP IS THE WALK CYCLE. A walk authored to look
-		right at walkSpeed (9) is being used to cover 19 studs/s ? more than twice
-		the ground per stride. Played at 1x the legs under-rotate by half and the
-		creature skates, looking dragged rather than run.
-
-		    sprintSpeed / the speed the clip was authored for  =  19 / 9  ?  2.1
-
-		2.1 would be the "correct" number ? feet exactly planted ? and it looked
-		frantic, which is why this is 1.75 instead. A walk cycle at double rate is
-		still a walk cycle: the poses are wrong for running however fast you play
-		them, so playing it fast enough to be technically right just makes the
-		wrongness busier.
-
-		Under-cranking it trades planted feet for a deliberate SKID. On something
-		this heavy that reads as mass sliding rather than as an error, which is the
-		better-looking wrong answer. Below about 1.4 it stops reading as either and
-		just looks broken.
-
-		A real sprint clip authored at 19 studs/s would put this at 1.0.
-	--]]
-	sprintAnimSpeed = 1.4,  -- was 2.0. Playback rate of the Sprint clip at full sprint (26). Lower = slower legs, more slide
-	sprintAnimBlendPoint = 0.25, -- was 0.55. 0-1 between walk (9) and sprint (26) speed: the sprint cycle takes over at ~13 studs/s
+	-- Playback multiplier for the Sprint clip at full sprint speed. The Sprint
+	-- clip is now a real sprint (not the walk cycle sped up), so 1.0 is the
+	-- starting point: lower if the legs look frantic, higher if the feet slide.
+	sprintAnimSpeed = 1.0,  -- was 1.4 while the walk cycle stood in for a sprint
+	sprintAnimBlendPoint = 0.25, -- 0-1 between jog (16) and sprint (27) speed: the sprint cycle takes over at ~19 studs/s
 	-- sprint cycle takes over when you're above walk
 	-- pace without holding Shift (coasting down).
 

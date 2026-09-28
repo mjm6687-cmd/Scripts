@@ -248,9 +248,54 @@ end
 -- ============================================================
 -- STEPS
 -- ============================================================
+--[[
+	CROUCHING IS SILENT.
+
+	The creature's own client knows it's crouched (CreatureCrouching, set by
+	CreatureMovement), but that attribute is written on a client and never reaches
+	anyone else. What does reach everyone is the animation: tracks replicate. So a
+	crouch counts if any playing track is one of the rig's Crouch* animations,
+	matched by AnimationId against the rig's Animations folder -- replicated tracks
+	don't keep the Animation object's name, but they do keep its id.
+--]]
+local function crouchIds(state): { [string]: boolean }
+	if state.crouchIds then
+		return state.crouchIds
+	end
+	local ids = {}
+	local folder = state.rig:FindFirstChild("Animations")
+	if folder then
+		for _, a in ipairs(folder:GetDescendants()) do
+			if a:IsA("Animation") and a.Name:sub(1, 6) == "Crouch" and a.AnimationId ~= "" then
+				ids[a.AnimationId] = true
+			end
+		end
+		state.crouchIds = ids -- cached once the folder exists
+	end
+	return ids
+end
+
+local function isCrouching(state): boolean
+	if state.rig:GetAttribute("CreatureCrouching") == true then
+		return true
+	end
+	local ids = crouchIds(state)
+	if next(ids) == nil then
+		return false
+	end
+	for _, track in ipairs(state.animator:GetPlayingAnimationTracks()) do
+		local anim = track.Animation
+		if anim and ids[anim.AnimationId] then
+			return true
+		end
+	end
+	return false
+end
+
 local function playStep(state)
 	local hum, cfg = state.humanoid, state.cfg
 	if hum.Health <= 0 then return end
+	if isCrouching(state) then return end
 	if hum.FloorMaterial == Enum.Material.Air and not recentlyWater(state) then return end
 	if hum.MoveDirection.Magnitude < cfg.minMoveDir then return end
 	if hum:GetState() == Enum.HumanoidStateType.Climbing then return end
