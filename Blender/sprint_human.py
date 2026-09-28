@@ -65,12 +65,13 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
     """One pose of the stride. The head is never keyed: it stays level with the body.
     hip:   (x, y, z) body offset in studs      hips:  (lean, twist, tilt) of LowerTorso-FK
     chest: (bend, twist) extra on Torso_FK
-    arms:  ((right pitch, roll, twist), (left pitch, roll, twist))   rfoot/lfoot: (y, z) in studs
+    arms:  ((right pitch, roll, twist, cross), (left ...))   rfoot/lfoot: (y, z) in studs
            pitch - = forward; roll + = out for the right arm, - = out for the left;
-           twist turns the arm on its own length (+ turns the right arm inward)
+           twist turns the arm on its own length (+ turns the right arm inward);
+           cross swings the (forward) arm in across the chest (+ = right arm inward)
     """
     def arm(a):
-        return [(YAW, a[2]), (PITCH, a[0] * ARM_SWING), (ROLL, a[1])]
+        return [(YAW, a[2]), (ROLL, a[1]), (PITCH, a[0] * ARM_SWING), (YAW, a[3])]
     return {
         HIP_BONE:      ([(PITCH, hips[0]), (YAW, hips[1]), (ROLL, hips[2])], S(*hip)),
         "Torso_FK":    ([(PITCH, chest[0]), (YAW, chest[1])], None),
@@ -88,19 +89,19 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
     hip=(-0.06, -0.05, -0.26), hips=(22, 10, 1), chest=(4, -14),
-    arms=((50, 6, 0), (-60, 35, -28)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
+    arms=((50, 6, 0, 0), (-60, -4, -28, -32)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
     hip=(-0.12, 0, -0.38), hips=(26, 7, -5), chest=(8, -10),
-    arms=((42, 7, 0), (-48, 28, -22)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
+    arms=((42, 7, 0, 0), (-48, -4, -22, -26)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
     hip=(-0.08, -0.05, -0.26), hips=(23, 0, -3), chest=(5, 0),
-    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.25, 0), lfoot=(-0.55, 0.95))
+    arms=((0, 6, 0, 0), (-5, -6, 0, -4)), rfoot=(0.25, 0), lfoot=(-0.55, 0.95))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
     hip=(-0.03, -0.1, 0.0), hips=(21, -8, 0), chest=(4, 12),
-    arms=((-55, -33, 26), (45, -6, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
+    arms=((-55, 4, 26, 30), (45, -6, 0, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
 
 
 def mirror(pose):
