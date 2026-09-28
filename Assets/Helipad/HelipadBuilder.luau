@@ -8,7 +8,7 @@
 	The pad only: a thin concrete slab with a small bevel and slim drainage
 	grates, the green painted surface, fine markings (border, dashed inner
 	square, ticks, corner brackets, outer circle, amber dash ring, touchdown
-	circle, aiming marks, H), tie-down points and small edge lights.
+	circle, aiming marks, H), tie-down points and neon edge lights.
 
 	PAD sets the size; every marking scales with it. Line widths are separate
 	and stay the same whatever the size.
@@ -33,10 +33,14 @@ local W_TOUCHDOWN = 0.6
 local W_AIM = 0.3
 local W_H = 1.2                       -- stroke of the H
 
+-- Size of the middle group (circles, amber ring, aiming marks, H, tie-downs)
+-- relative to the pad. Lower = more space between it and the dashed square.
+local CIRCLE_SCALE = 0.82
+
 -- Edge lights (studs).
 local LIGHTS_PER_SIDE = 7
-local LIGHT_BASE = 0.4                -- fixture diameter
 local LIGHT_LENS = 0.22               -- glowing lens diameter
+local LIGHT_HEIGHT = 0.08
 
 -------------------------------------------------------------------------------
 
@@ -54,6 +58,7 @@ local MAT = {
 
 local H = PAD / 2                     -- half of the green
 local K = H / 30                      -- scale for marking positions (1 at PAD 60)
+local C = K * CIRCLE_SCALE            -- scale for the middle group
 local SLAB_TOP = 0.5                  -- slab height
 local SURF = SLAB_TOP + 0.02          -- top of the green
 local LINE = SURF + 0.02              -- top of the paint
@@ -218,22 +223,22 @@ do
 end
 
 -- Circles and aiming marks.
-ring(paint, "OuterCircle", 23 * K, 120, W_OUTER_CIRCLE, "white")
-ring(paint, "AmberRing", 24.2 * K, 80, W_AMBER, "amber", function(i)
+ring(paint, "OuterCircle", 23 * C, 120, W_OUTER_CIRCLE, "white")
+ring(paint, "AmberRing", 24.2 * C, 80, W_AMBER, "amber", function(i)
 	return i % 2 == 0
 end, 0.9)
-ring(paint, "TouchdownCircle", 14 * K, 96, W_TOUCHDOWN, "white")
+ring(paint, "TouchdownCircle", 14 * C, 96, W_TOUCHDOWN, "white")
 -- Aiming marks: short arcs on the axes and diagonals.
 for i = 0, 7 do
 	local a = i * math.pi / 4
-	local r = 18.5 * K
+	local r = 18.5 * C
 	part(paint, "AimingMark", CFrame.new(math.cos(a) * r, (SURF + LINE) / 2, math.sin(a) * r) * CFrame.Angles(0, -a, 0),
-		Vector3.new(W_AIM, LINE - SURF, 3 * K), "white")
+		Vector3.new(W_AIM, LINE - SURF, 3 * C), "white")
 end
 
 -- H.
 do
-	local tall, wide = 11 * K, 7.4 * K
+	local tall, wide = 11 * C, 7.4 * C
 	local hx = wide / 2 - W_H / 2
 	stripe(paint, "H", -hx, -tall / 2, -hx, tall / 2, W_H)
 	stripe(paint, "H", hx, -tall / 2, hx, tall / 2, W_H)
@@ -242,12 +247,12 @@ end
 
 -- Tie-down points: small flush steel rings.
 for _, c in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
-	local x, z = c[1] * 8.5 * K, c[2] * 8.5 * K
+	local x, z = c[1] * 8.5 * C, c[2] * 8.5 * C
 	cyl(paint, "TieDown", x, SLAB_TOP, z, SURF - SLAB_TOP + 0.015, 0.5, "metal")
 	cyl(paint, "TieDownEye", x, SURF + 0.015, z, 0.01, 0.25, "dark")
 end
 
--- Edge lights: small low fixtures just inside the edge of the green.
+-- Edge lights: just the glowing lens, set into the edge of the green.
 do
 	local d = H - 0.4
 	local step = 2 * d / LIGHTS_PER_SIDE
@@ -255,8 +260,7 @@ do
 		local rot = CFrame.Angles(0, k * math.pi / 2, 0)
 		for i = 0, LIGHTS_PER_SIDE - 1 do
 			local v = rot * Vector3.new(-d + i * step, 0, -d)
-			cyl(lights, "LightBase", v.X, SURF, v.Z, 0.08, LIGHT_BASE, "metal")
-			cyl(lights, "LightLens", v.X, SURF + 0.08, v.Z, 0.06, LIGHT_LENS, "lens")
+			cyl(lights, "Light", v.X, SURF, v.Z, LIGHT_HEIGHT, LIGHT_LENS, "lens")
 		end
 	end
 end
