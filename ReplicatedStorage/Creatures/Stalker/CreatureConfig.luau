@@ -55,7 +55,7 @@ return {
 	-- jogging (the arm only locks at sprint speed); aiming a throw drops you
 	-- back to a walk and turns the jog off. No jogging sideways or backwards --
 	-- strafing falls back to the walk speed. Shift from a jog goes to a sprint.
-	jogSpeed = 16,
+	jogSpeed = 13,
 	accelJog = 16,             -- studs/s^2 ramp up to jog speed
 	decelJog = 22,             -- studs/s^2 ramp down while above walk speed
 	jogAnimSpeed = 1.0,        -- playback rate of the Jog clip at full jog speed
@@ -77,9 +77,9 @@ return {
 	-- Same walk animation and same footstep clips ? only faster, lower and
 	-- heavier. Everything here is deliberately WORSE than the walk equivalent;
 	-- that gap is what the weight is made of.
-	sprintSpeed = 27,  -- was 26 (19, briefly 35)
+	sprintSpeed = 21,  -- was 27 (26, 19, briefly 35)
 
-	accelSprint = 13,   -- was 9. Reaches 26 in roughly 1.3s
+	accelSprint = 13,   -- was 9. Walk (9) to sprint (21) in roughly 0.9s
 	-- a visible wind-up instead of an instant snap.
 	decelSprint = 18,   -- was 14
 	-- and you can't just stop. Also applies while slowing
@@ -102,7 +102,7 @@ return {
 	-- clip is now a real sprint (not the walk cycle sped up), so 1.0 is the
 	-- starting point: lower if the legs look frantic, higher if the feet slide.
 	sprintAnimSpeed = 1.0,  -- was 1.4 while the walk cycle stood in for a sprint
-	sprintAnimBlendPoint = 0.25, -- 0-1 between jog (16) and sprint (27) speed: the sprint cycle takes over at ~19 studs/s
+	sprintAnimBlendPoint = 0.25, -- 0-1 between jog (13) and sprint (21) speed: the sprint cycle takes over at ~15 studs/s
 	-- sprint cycle takes over when you're above walk
 	-- pace without holding Shift (coasting down).
 

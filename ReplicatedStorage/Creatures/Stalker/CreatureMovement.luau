@@ -196,7 +196,7 @@ local TUNE = {
 	sprintMinSpeedToStart = config.sprintMinSpeedToStart or 3,
 
 	-- Jog (X toggles) and crouch (Ctrl toggles).
-	jogSpeed = config.jogSpeed or 16,
+	jogSpeed = config.jogSpeed or 13,
 	accelJog = config.accelJog or 16,
 	decelJog = config.decelJog or 22,
 	jogLeanMult = config.jogLeanMult or 1.25,
