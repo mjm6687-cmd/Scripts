@@ -11,7 +11,7 @@ from mathutils import Quaternion, Vector
 RIG_NAME = "__PrimaryArmature"
 ACTION_NAME = "Sprint_Human"
 HIP_BONE = "LowerTorso-FK"
-CYCLE = 0.62  # seconds for a full stride (right step + left step). Higher = slower, heavier.
+CYCLE = 0.54  # seconds for a full stride (right step + left step). Higher = slower, heavier.
 
 # Which way the character faces in this rig: -1 = faces -Y, 1 = faces +Y.
 # If the run goes backwards, flip this number.
@@ -82,20 +82,20 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # The forward arm swings in across the chest and turns inward; the back arm
 # stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
-    hip=(-0.06, -0.05, -0.18), hips=(22, 10, 1), chest=(4, -14),
-    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.2, 0), lfoot=(1.05, 0.5))
+    hip=(-0.06, -0.05, -0.26), hips=(22, 10, 1), chest=(4, -14),
+    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.4, 0), lfoot=(1.3, 0.65))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
-    hip=(-0.12, 0, -0.32), hips=(26, 7, -5), chest=(8, -10),
-    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.6, 0), lfoot=(0.55, 0.95))
+    hip=(-0.12, 0, -0.38), hips=(26, 7, -5), chest=(8, -10),
+    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.7, 0), lfoot=(0.6, 1.2))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
-    hip=(-0.08, -0.05, -0.2), hips=(23, 0, -3), chest=(5, 0),
-    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.2, 0), lfoot=(-0.45, 1.05))
+    hip=(-0.08, -0.05, -0.26), hips=(23, 0, -3), chest=(5, 0),
+    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.25, 0), lfoot=(-0.55, 1.3))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
-    hip=(-0.03, -0.08, -0.05), hips=(21, -8, 0), chest=(4, 12),
-    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.1, 0.25), lfoot=(-1.15, 0.5))
+    hip=(-0.03, -0.1, 0.0), hips=(21, -8, 0), chest=(4, 12),
+    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.35, 0.35), lfoot=(-1.4, 0.6))
 
 
 def mirror(pose):
