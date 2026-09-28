@@ -8,10 +8,11 @@
 --   * ORB LIGHTS: they breathe (brightness and reach swell and ease), shimmer
 --     unevenly, drift between blue and violet, and every half minute or so
 --     surge: flare brighter, whiter and wider, then fade back.
---   * SOUNDS (once their ids are filled in below): a drone from the orb that
---     breathes and lifts with the surges, soft air from the crater, a swell
---     at each surge, and stone creaks and pebble clacks from the floating
---     rocks now and then. All 3D, played locally, only when you're near.
+--   * SOUNDS: a drone from the orb that breathes and lifts with the surges,
+--     soft air from the crater, a swell at each surge, stone creaks and pebble
+--     clacks from the floating rocks, and a random sound every 14-35 s. The
+--     surge and random sounds carry a long way, built like the creature roar:
+--     a detailed near layer, a muffled distant layer and a late echo.
 -- Only the anomaly's own rocks, lights and sounds are touched: no camera,
 -- Lighting service or screen effects.
 --
@@ -29,8 +30,6 @@ local RunService = game:GetService("RunService")
 local TAG = "HollowLift"
 local CULL_DISTANCE = 350
 
--- Per kind of rock: seconds per turn, tilt of its orbit (fraction of its
--- radius), bob height and period, tumble speed (degrees per second).
 -- Orb light animation. Brightness/range are multiples of the values the
 -- builder set (stored as BaseBrightness / BaseRange attributes on each light).
 local LIGHT = {
@@ -54,8 +53,8 @@ local LIGHT = {
 -- Sound ids ("rbxassetid://..."); upload the files in Assets/Anomaly/sounds.
 -- Blank ones are skipped.
 local SOUNDS = {
-	Hum = "rbxassetid://105462376919787",   -- hum_loop.ogg
-	Air = "rbxassetid://115079028336662",   -- air_loop.ogg
+	Hum = "rbxassetid://9116390056",
+	Air = "rbxassetid://9125636867",
 	Surge = "rbxassetid://74739307029789",  -- surge.ogg
 	Creaks = {                              -- rock_creak_1/2/3.ogg
 		"rbxassetid://136679394687918",
@@ -78,21 +77,49 @@ local SOUNDS = {
 	},
 }
 local SOUND = {
-	hearDistance = 80,        -- sounds start/stop within this range of the camera
+	eventDistance = 900,      -- surge/random sounds are scheduled within this range
+	detailDistance = 60,      -- creaks and clacks only within this range
 	-- The hum/surge and the air play from invisible boxes this size, so with
 	-- volumetric audio they come from the whole space, not a single point.
 	volumeSize = Vector3.new(30, 30, 30),
 	humVolume = 0.6,
-	airVolume = 0.35,
-	surgeVolume = 0.8,
+	airVolume = 0.15,
+	-- The air comes and goes in gusts: on for a while, then quiet, at random.
+	-- The hum is always on.
+	airOn = { 6, 18 },        -- seconds a gust lasts
+	airOff = { 5, 20 },       -- seconds of quiet between gusts
+	airStrength = { 0.6, 1.2 }, -- how loud each gust is (times airVolume)
+	airPitch = { 0.92, 1.08 },
+	airFade = 2.5,            -- seconds to fade in or out
+	surgeVolume = 1.2,
 	creakVolume = { 0.25, 0.5 },
 	clackVolume = { 0.2, 0.4 },
 	creakEvery = { 3, 8 },    -- seconds between creaks
 	clackEvery = { 2, 6 },
-	randomVolume = 0.7,
+	randomVolume = 2.5,
 	randomEvery = { 14, 35 }, -- seconds between the Random sounds
 }
 
+--[[
+	DISTANCE, the same way the creature roar does it (CreatureRoarServer).
+	A single sound just gets quieter with distance, which reads as "small thing
+	nearby", not "big thing far away". So the surge and random sounds play as
+	three copies at once:
+	  near  - the detailed sound, full volume across a wide core, gone by mid range
+	  far   - a little later, treble gutted, bass lifted, pitch dropped: what
+	          reaches you across the map
+	  echo  - later still, darker and quieter: the landscape throwing it back
+	Close up the near layer covers the others; far away only the muffled roll and
+	its echo are left.
+--]]
+local DISTANCE = {
+	near = { min = 30, max = 160 },
+	far = { min = 120, max = 900, volume = 0.9, delay = 0.14, high = -42, mid = -12, low = 5, octave = 0.88 },
+	echo = { enabled = true, volume = 0.4, delay = 0.42, high = -55, mid = -16, low = 4, octave = 0.84 },
+}
+
+-- Per kind of rock: seconds per turn, tilt of its orbit (fraction of its
+-- radius), bob height and period, tumble speed (degrees per second).
 local KINDS = {
 	Grit    = { turn = { 60, 90 },   tilt = { 0.05, 0.2 }, bob = 0.15, bobT = { 3, 5 },  spin = { 15, 35 } },
 	Rock    = { turn = { 120, 180 }, tilt = { 0.1, 0.3 },  bob = 0.3,  bobT = { 5, 7 },  spin = { 3, 8 } },
@@ -261,8 +288,12 @@ local function surgeAt(entry, t: number): number
 	return 0
 end
 
+local function breatheAt(entry, t: number): number
+	return 0.5 + 0.5 * math.sin(2 * math.pi * t / LIGHT.breathePeriod + entry.phase)
+end
+
 local function animateLights(entry, t: number)
-	local breathe = 0.5 + 0.5 * math.sin(2 * math.pi * t / LIGHT.breathePeriod + entry.phase)
+	local breathe = breatheAt(entry, t)
 	local shimmer = LIGHT.shimmer * (math.sin(t * 7.3 + entry.phase) + math.sin(t * 11.1 + 1.3) + math.sin(t * 17.7 + 2.9)) / 3
 	local surge = surgeAt(entry, t)
 	local drift = 0.5 + 0.5 * math.sin(2 * math.pi * t / LIGHT.colourPeriod + entry.phase * 0.5)
@@ -352,8 +383,11 @@ local function startSounds(entry)
 	if has(SOUNDS.Air) then
 		-- sits on the crater floor and rises up through the dust column
 		entry.airAnchor = volumeAt("AirVolume", floorOf(entry) + Vector3.new(0, SOUND.volumeSize.Y / 2, 0))
-		entry.air = newSound(entry.airAnchor, SOUNDS.Air, SOUND.airVolume, 45, true)
+		entry.air = newSound(entry.airAnchor, SOUNDS.Air, 0, 45, true)
 		entry.air:Play()
+		entry.airLevel = 0
+		entry.airGust = false
+		entry.airUntil = os.clock() + soundRng:NextNumber(2, 8) -- first gust soon
 	end
 	entry.nextCreak = os.clock() + soundRng:NextNumber(1, SOUND.creakEvery[2])
 	entry.nextClack = os.clock() + soundRng:NextNumber(1, SOUND.clackEvery[2])
@@ -369,6 +403,43 @@ local function stopSounds(entry)
 		end
 	end
 	entry.hum, entry.air = nil, nil
+end
+
+-- A filtered, delayed copy (the far layer or the echo).
+local function playFiltered(parent, id, volume, layer, far)
+	local s = newSound(parent, id, volume * layer.volume, far.max)
+	s.RollOffMinDistance = far.min
+	local eq = Instance.new("EqualizerSoundEffect")
+	eq.HighGain = layer.high
+	eq.MidGain = layer.mid
+	eq.LowGain = layer.low
+	eq.Priority = 0 -- EQ before the pitch shift
+	eq.Parent = s
+	local pitch = Instance.new("PitchShiftSoundEffect")
+	pitch.Octave = layer.octave
+	pitch.Priority = 1
+	pitch.Parent = s
+	task.delay(layer.delay, function()
+		if s.Parent then
+			s:Play()
+		end
+	end)
+	Debris:AddItem(s, 45)
+end
+
+-- A one-shot from the orb, near + far + echo.
+local function playEvent(entry, id, volume)
+	if not (entry.orbAnchor and has(id)) then
+		return
+	end
+	local near = newSound(entry.orbAnchor, id, volume, DISTANCE.near.max)
+	near.RollOffMinDistance = DISTANCE.near.min
+	near:Play()
+	Debris:AddItem(near, 45)
+	playFiltered(entry.orbAnchor, id, volume, DISTANCE.far, DISTANCE.far)
+	if DISTANCE.echo.enabled then
+		playFiltered(entry.orbAnchor, id, volume, DISTANCE.echo, DISTANCE.far)
+	end
 end
 
 -- A one-shot from a random rock (optionally only rocks named `only`).
@@ -389,36 +460,49 @@ local function fromRandomRock(entry, id, volRange, only)
 	Debris:AddItem(s, 5)
 end
 
-local function updateSounds(entry, breathe: number, surge: number, near: boolean)
-	if near and not entry.sounding then
-		startSounds(entry)
-	elseif not near and entry.sounding then
-		stopSounds(entry)
-	end
+local function updateSounds(entry, breathe: number, surge: number, dist: number)
 	if not entry.sounding then
-		entry.lastSurge = surge
-		return
+		startSounds(entry)
 	end
 	if entry.hum then
 		entry.hum.Volume = SOUND.humVolume * (0.8 + 0.2 * breathe + 0.35 * surge)
 		entry.hum.PlaybackSpeed = 1 + 0.03 * surge
 	end
+	local now = os.clock()
+	local dt = math.clamp(now - (entry.lastTick or now), 0, 0.5)
+	entry.lastTick = now
 	if entry.air then
-		entry.air.Volume = SOUND.airVolume * (0.85 + 0.15 * breathe + 0.5 * surge)
+		-- Start or end a gust when its time is up.
+		if now >= entry.airUntil then
+			entry.airGust = not entry.airGust
+			if entry.airGust then
+				entry.airStrength = soundRng:NextNumber(SOUND.airStrength[1], SOUND.airStrength[2])
+				entry.air.PlaybackSpeed = soundRng:NextNumber(SOUND.airPitch[1], SOUND.airPitch[2])
+				pcall(function() -- a different stretch of the clip each time
+					entry.air.TimePosition = soundRng:NextNumber(0, math.max(0, entry.air.TimeLength - 1))
+				end)
+				entry.airUntil = now + soundRng:NextNumber(SOUND.airOn[1], SOUND.airOn[2])
+			else
+				entry.airUntil = now + soundRng:NextNumber(SOUND.airOff[1], SOUND.airOff[2])
+			end
+		end
+		-- Fade towards the gust's level (or silence).
+		local target = entry.airGust and entry.airStrength or 0
+		local step = dt / SOUND.airFade * math.max(entry.airStrength or 1, 0.5)
+		entry.airLevel += math.clamp(target - entry.airLevel, -step, step)
+		entry.air.Volume = SOUND.airVolume * entry.airLevel * (0.85 + 0.15 * breathe + 0.5 * surge)
 	end
 	-- Surge one-shot on the rising edge of each surge.
-	if surge > 0 and (entry.lastSurge or 0) == 0 and has(SOUNDS.Surge) then
-		local s = newSound(entry.orbAnchor, SOUNDS.Surge, SOUND.surgeVolume, 90)
-		s:Play()
-		Debris:AddItem(s, 6)
+	if surge > 0 and (entry.lastSurge or 0) == 0 then
+		playEvent(entry, SOUNDS.Surge, SOUND.surgeVolume)
 	end
 	entry.lastSurge = surge
-	local now = os.clock()
-	if now >= entry.nextCreak then
+	local close = dist <= SOUND.detailDistance
+	if now >= entry.nextCreak and close then
 		entry.nextCreak = now + soundRng:NextNumber(SOUND.creakEvery[1], SOUND.creakEvery[2])
 		fromRandomRock(entry, pickId(SOUNDS.Creaks), SOUND.creakVolume, "Rock")
 	end
-	if now >= entry.nextClack then
+	if now >= entry.nextClack and close then
 		entry.nextClack = now + soundRng:NextNumber(SOUND.clackEvery[1], SOUND.clackEvery[2])
 		fromRandomRock(entry, pickId(SOUNDS.Clacks), SOUND.clackVolume, "Grit")
 	end
@@ -434,9 +518,7 @@ local function updateSounds(entry, breathe: number, surge: number, near: boolean
 		if #choices > 0 then
 			local id = choices[soundRng:NextInteger(1, #choices)]
 			entry.lastRandom = id
-			local s = newSound(entry.orbAnchor, id, SOUND.randomVolume, 90)
-			s:Play()
-			Debris:AddItem(s, 30)
+			playEvent(entry, id, SOUND.randomVolume)
 		end
 	end
 end
@@ -454,14 +536,18 @@ RunService.Heartbeat:Connect(function()
 	for _, entry in pairs(anomalies) do
 		local dist = (entry.centre - camPos).Magnitude
 		if dist <= CULL_DISTANCE then
+			-- close enough to see: animate lights and rocks
 			local breathe, surge = animateLights(entry, t)
-			updateSounds(entry, breathe, surge, dist <= SOUND.hearDistance)
+			updateSounds(entry, breathe, surge, dist)
 			local centreCF = CFrame.new(entry.centre)
 			for part, info in pairs(entry.rocks) do
 				info.centreCF = centreCF
 				table.insert(parts, part)
 				table.insert(cframes, place(info, t))
 			end
+		elseif dist <= SOUND.eventDistance then
+			-- too far to see, still in earshot of the far layers
+			updateSounds(entry, breatheAt(entry, t), surgeAt(entry, t), dist)
 		elseif entry.sounding then
 			stopSounds(entry)
 		end
