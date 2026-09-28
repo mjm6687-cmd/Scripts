@@ -11,10 +11,14 @@ ACTION_NAME = "Sprint_Heavy"
 HIP_BONE = "LowerTorso-FK"
 CYCLE = 0.8  # seconds for a full stride (right step + left step). Higher = slower, heavier.
 
-# Armature-space axes: front of the character is -Y.
-PITCH = (1, 0, 0)  # + leans torso/head forward, - swings arms forward
-YAW = (0, 0, 1)    # - turns the chest to the character's right
-ROLL = (0, 1, 0)   # + moves right arm outward / tilts torso left
+# Which way the character faces in this rig: -1 = faces -Y, 1 = faces +Y.
+# If the run goes backwards, flip this number.
+FACING = 1
+
+# Armature-space axes (flipped automatically by FACING).
+PITCH = (-FACING, 0, 0)  # + leans torso/head forward, - swings arms forward
+YAW = (0, 0, 1)          # - turns the chest to the character's right
+ROLL = (0, -FACING, 0)   # + moves right arm outward / tilts torso left
 
 rig = bpy.data.objects[RIG_NAME]
 bpy.context.view_layer.objects.active = rig
@@ -30,8 +34,8 @@ STUD = (bones["Head"].head_local.z - bones["LeftLeg-IK"].head_local.z) / 4 or 1.
 
 
 def S(x, y, z):
-    """Offset in studs, armature space. x<0 is the character's right, y<0 forward, z>0 up."""
-    return (x * STUD, y * STUD, z * STUD)
+    """Offset in studs relative to the character. x<0 is its right, y<0 forward, z>0 up."""
+    return (x * STUD * FACING, y * STUD * FACING, z * STUD)
 
 
 # --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
