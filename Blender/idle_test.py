@@ -10,10 +10,9 @@ ACTION_NAME = "Idle_Test"
 LENGTH = 60  # frames (2 seconds at 30 fps)
 
 # Armature-space axes. If a motion goes the wrong way, flip the sign of the degrees.
-# The character faces +Y in this rig.
-PITCH = (-1, 0, 0)  # lean forward/back
-YAW = (0, 0, 1)     # turn left/right
-ROLL = (0, -1, 0)   # tilt sideways
+PITCH = (1, 0, 0)  # lean forward/back
+YAW = (0, 0, 1)    # turn left/right
+ROLL = (0, 1, 0)   # tilt sideways
 
 rig = bpy.data.objects[RIG_NAME]
 bpy.context.view_layer.objects.active = rig
