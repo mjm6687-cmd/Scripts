@@ -118,6 +118,26 @@ roads). Change `ORIGIN` / `YAW` at the top to move or turn it. Running it again
 replaces the old one; Ctrl+Z undoes it. Turn `SHOW_LABELS` off (or delete the
 `BuildLabel` guis) before publishing.
 
+## Forward Aviation Base + command post
+
+Two more **Command Bar** builders in `Assets/FAB/`, built with the
+MaterialVariants in MaterialService:
+
+- `FABBuilder.luau` builds `Workspace > FAB`: octagonal T-wall perimeter,
+  hangars 01/02 with the ops centre and control tower, fuel farm, four flight
+  line pads + the main pad, vehicle park, maintenance shed, power plant,
+  container yard, crew quarters, gate A1 with towers, floodlights.
+- `CommandPostBuilder.luau` builds `Workspace > CommandPost`, a hardened TOC with
+  a furnished interior. If the FAB exists it places itself inside it (west of
+  the main pad); otherwise at `ORIGIN`.
+
+Things that should be meshes (helicopters, vehicles, radios, satellite dish)
+are `MESH_...` placeholder boxes with the `Baseplate Tile` texture, tagged
+`MeshPlaceholder` with a `ReplaceWith` attribute. Swap them for your models.
+
+`Assets/Tools/ListMaterials.luau` (Command Bar) prints everything in your
+MaterialService.
+
 ## Assets
 
 `Assets/Aurora/` -- aurora borealis textures (`aurora_curtain.png`,
