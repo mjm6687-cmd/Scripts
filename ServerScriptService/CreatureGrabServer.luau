@@ -2571,11 +2571,12 @@ local function walkSpeedOf(rig: Model): number
 	if module and module:IsA("ModuleScript") then
 		local ok, cfg = pcall(require, module)
 		if ok and typeof(cfg) == "table" and typeof(cfg.walkSpeed) == "number" then
-			local jog = typeof(cfg.jogSpeed) == "number" and cfg.jogSpeed or 0
+			-- 13 = CreatureMovement's default when the config has no jogSpeed
+			local jog = typeof(cfg.jogSpeed) == "number" and cfg.jogSpeed or 13
 			return math.max(cfg.walkSpeed, jog)
 		end
 	end
-	return 9
+	return 13
 end
 
 local function tooFastToUseArm(rig: Model): boolean
@@ -2624,6 +2625,9 @@ actionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3, arg
 	end
 
 	if (action == "Grab" or action == "Eat") and tooFastToUseArm(rig) then
+		-- Remove once grabbing at a jog is confirmed working.
+		warn(("[CreatureGrabServer] %s refused: moving faster than jog speed %.1f + slack")
+			:format(action, walkSpeedOf(rig)))
 		return
 	end
 

@@ -67,9 +67,11 @@ local DEFAULTS = {
 	-- No grabbing or eating above this. Read from the same walkSpeed the movement
 	-- uses, so "walking" means the same thing in both places.
 	walkSpeed = 9,
-	-- Jogging (X) still leaves the arm free, so the limit is the jog speed when
-	-- the creature has one. Only sprinting locks the arm.
-	jogSpeed = 0,
+	-- Jogging (X) still leaves the arm free, so the limit is the jog speed.
+	-- Only sprinting locks the arm. 13 is CreatureMovement's own default, so a
+	-- creature whose CreatureConfig has no jogSpeed still gets the same number
+	-- here as the speed it actually jogs at.
+	jogSpeed = 13,
 
 	-- THROW. Must match CreatureGrabServer's THROW_DEFAULTS (both read these same
 	-- keys out of CreatureConfig), or the drawn arc won't be where they land.
@@ -141,6 +143,11 @@ local DEFAULTS = {
 -- Studs/s of slack over walkSpeed before it counts as too fast. Covers the small
 -- overshoot of the speed ramp and the slope/lean wobble at a normal walk.
 local WALK_SPEED_SLACK = 1.5
+
+-- Prints (at most once a second) why the arm is locked while you're holding the
+-- button. Turn off once grabbing at a jog works.
+local DEBUG_ARM_LOCK = true
+local lastArmLockPrint = 0
 
 -- The corpse toss swing (timing comes from the server, see CreatureGrabServer's
 -- CORPSE_TOSS_TIME). Rise: 0 = straight down, 90 = level. Yaw: negative = out
@@ -1075,8 +1082,15 @@ function System.update(dt: number)
 			local root = rig:FindFirstChild("HumanoidRootPart")
 			local v = root and root.AssemblyLinearVelocity or Vector3.zero
 			local speed = Vector3.new(v.X, 0, v.Z).Magnitude
-			armFree = rig:GetAttribute("CreatureSprinting") ~= true
-				and speed <= math.max(cfg.walkSpeed, cfg.jogSpeed) + WALK_SPEED_SLACK
+			local limit = math.max(cfg.walkSpeed, cfg.jogSpeed) + WALK_SPEED_SLACK
+			local sprintingNow = rig:GetAttribute("CreatureSprinting") == true
+			armFree = not sprintingNow and speed <= limit
+
+			if DEBUG_ARM_LOCK and reaching and not armFree and os.clock() - lastArmLockPrint > 1 then
+				lastArmLockPrint = os.clock()
+				print(("[Arm] locked: sprinting=%s speed=%.1f limit=%.1f (walkSpeed=%s jogSpeed=%s)")
+					:format(tostring(sprintingNow), speed, limit, tostring(cfg.walkSpeed), tostring(cfg.jogSpeed)))
+			end
 		end
 		-- ---- throw animation clock ----
 		-- Local: our own predicted start. Everyone else: the server's ThrowStart.
