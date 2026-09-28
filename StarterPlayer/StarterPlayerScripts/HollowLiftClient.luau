@@ -2,10 +2,14 @@
 -- CLASS: LocalScript
 -- PLACE IN: StarterPlayer > StarterPlayerScripts
 --
--- Makes the floating rocks of every Hollow Lift anomaly move: grit orbits
--- tight round the orb, bigger rocks on slower tilted orbits, the Deep boulder
--- turns in place, and the rim slabs just sway. Nothing else is touched (no
--- camera, lighting or screen effects).
+-- Brings every Hollow Lift anomaly to life:
+--   * ROCKS: grit orbits tight round the orb, bigger rocks on slower tilted
+--     orbits, the Deep boulder turns in place, the rim slabs just sway.
+--   * ORB LIGHTS: they breathe (brightness and reach swell and ease), shimmer
+--     unevenly, drift between blue and violet, and every half minute or so
+--     surge: flare brighter, whiter and wider, then fade back.
+-- Only the anomaly's own rocks and lights are touched: no camera, Lighting
+-- service or screen effects.
 --
 -- Finds anomalies by the "HollowLift" tag (the builder adds it) or by the
 -- name HollowLift. Rocks are the parts named Grit, Rock, Boulder and Slab
@@ -23,6 +27,26 @@ local CULL_DISTANCE = 350
 
 -- Per kind of rock: seconds per turn, tilt of its orbit (fraction of its
 -- radius), bob height and period, tumble speed (degrees per second).
+-- Orb light animation. Brightness/range are multiples of the values the
+-- builder set (stored as BaseBrightness / BaseRange attributes on each light).
+local LIGHT = {
+	breathePeriod = 8,        -- seconds per breath
+	breathe = 0.35,           -- how much a breath adds
+	shimmer = 0.08,           -- constant uneven waver
+	colourPeriod = 23,        -- seconds for one blue -> violet -> blue drift
+	surgeEvery = { 25, 40 },  -- seconds between surges (varies per anomaly)
+	surgeLength = 4.5,        -- seconds to fade back after a surge
+	surgeBoost = 1.4,         -- extra brightness at the peak of a surge
+	surgeReach = 0.3,         -- extra range at the peak (fraction)
+	blue = Color3.fromRGB(180, 194, 255),
+	violet = Color3.fromRGB(200, 178, 255),
+	white = Color3.fromRGB(235, 238, 255),
+	-- how strongly each light follows the effects
+	OrbLight   = { breathe = 1,   surge = 1,   range = true },
+	FloorLight = { breathe = 0.8, surge = 0.7, range = false },
+	CoreLight  = { breathe = 1.2, surge = 1.6, range = true },
+}
+
 local KINDS = {
 	Grit    = { turn = { 60, 90 },   tilt = { 0.05, 0.2 }, bob = 0.15, bobT = { 3, 5 },  spin = { 15, 35 } },
 	Rock    = { turn = { 120, 180 }, tilt = { 0.1, 0.3 },  bob = 0.3,  bobT = { 5, 7 },  spin = { 3, 8 } },
@@ -100,21 +124,34 @@ local function track(model: Instance)
 	if not model:IsA("Model") or anomalies[model] then
 		return
 	end
-	local entry = { model = model, centre = centreOf(model), rocks = {} }
+	local c0 = centreOf(model)
+	local seed = c0.X * 0.13 + c0.Z * 0.29
+	local entry = {
+		model = model, centre = c0, rocks = {}, lights = {},
+		phase = hashRand(seed, 0, 2 * math.pi),
+		surgeEvery = hashRand(seed + 1, LIGHT.surgeEvery[1], LIGHT.surgeEvery[2]),
+		surgeOffset = hashRand(seed + 2, 0, 60),
+	}
 	anomalies[model] = entry
-	for _, d in ipairs(model:GetDescendants()) do
+	local function consider(d)
 		if d:IsA("BasePart") then
 			addRock(entry, d)
+		elseif d:IsA("Light") and type(LIGHT[d.Name]) == "table" then
+			entry.lights[d] = {
+				cfg = LIGHT[d.Name],
+				brightness = d:GetAttribute("BaseBrightness") or d.Brightness,
+				range = d:GetAttribute("BaseRange") or d.Range,
+			}
 		end
 	end
-	-- Streaming: rocks can arrive later, or leave and come back.
-	entry.added = model.DescendantAdded:Connect(function(d)
-		if d:IsA("BasePart") then
-			addRock(entry, d)
-		end
-	end)
+	for _, d in ipairs(model:GetDescendants()) do
+		consider(d)
+	end
+	-- Streaming: parts can arrive later, or leave and come back.
+	entry.added = model.DescendantAdded:Connect(consider)
 	entry.removing = model.DescendantRemoving:Connect(function(d)
 		entry.rocks[d] = nil
+		entry.lights[d] = nil
 	end)
 end
 
@@ -165,6 +202,36 @@ local function place(info, t: number): CFrame
 		* CFrame.fromAxisAngle(info.spinAxis, info.spin * t) * info.rot
 end
 
+-- 0 most of the time; jumps to 1 at a surge and fades back.
+local function surgeAt(entry, t: number): number
+	local s = (t + entry.surgeOffset) % entry.surgeEvery
+	if s < 0.3 then
+		return s / 0.3 -- quick rise
+	elseif s < 0.3 + LIGHT.surgeLength then
+		return math.exp(-(s - 0.3) * 4 / LIGHT.surgeLength) -- slow fade
+	end
+	return 0
+end
+
+local function animateLights(entry, t: number)
+	local breathe = 0.5 + 0.5 * math.sin(2 * math.pi * t / LIGHT.breathePeriod + entry.phase)
+	local shimmer = LIGHT.shimmer * (math.sin(t * 7.3 + entry.phase) + math.sin(t * 11.1 + 1.3) + math.sin(t * 17.7 + 2.9)) / 3
+	local surge = surgeAt(entry, t)
+	local drift = 0.5 + 0.5 * math.sin(2 * math.pi * t / LIGHT.colourPeriod + entry.phase * 0.5)
+	local colour = LIGHT.blue:Lerp(LIGHT.violet, drift):Lerp(LIGHT.white, surge * 0.7)
+	for light, info in pairs(entry.lights) do
+		local cfg = info.cfg
+		local k = 1 - LIGHT.breathe * 0.5 + LIGHT.breathe * breathe * cfg.breathe + shimmer + LIGHT.surgeBoost * surge * cfg.surge
+		light.Brightness = info.brightness * math.max(0, k)
+		if cfg.range then
+			light.Range = math.min(60, info.range * (0.92 + 0.08 * breathe + LIGHT.surgeReach * surge))
+		end
+		if light.Name ~= "CoreLight" then
+			light.Color = colour
+		end
+	end
+end
+
 local parts, cframes = {}, {}
 RunService.Heartbeat:Connect(function()
 	local camera = workspace.CurrentCamera
@@ -177,6 +244,7 @@ RunService.Heartbeat:Connect(function()
 	table.clear(cframes)
 	for _, entry in pairs(anomalies) do
 		if (entry.centre - camPos).Magnitude <= CULL_DISTANCE then
+			animateLights(entry, t)
 			local centreCF = CFrame.new(entry.centre)
 			for part, info in pairs(entry.rocks) do
 				info.centreCF = centreCF

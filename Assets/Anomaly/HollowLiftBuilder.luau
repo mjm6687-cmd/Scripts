@@ -14,7 +14,10 @@
 	    a slowly turning halo of bent light, two ForceField shimmer shells,
 	    streaks falling inward from ~11 studs out, flickering twinkles,
 	    flat ripples spreading out horizontally, three glowing orbit trails
-	    at different tilts, and a faint blue light
+	    at different tilts
+	  * three lights: a shadow-casting main light (range 30), a spotlight
+	    straight down onto the crater (the rocks' shadows sweep across it),
+	    and a small bright core light
 	  * your rock meshes: small grit in a tight swarm round the lens, bigger
 	    rocks further out on tilted rings, and flattened ones lifted just off
 	    the ground round the rim like peeled-up slabs (tipped with the inner
@@ -185,12 +188,32 @@ end
 local outer = ball("Lens", 6 * S, LENS_COLOR)
 local inner = ball("LensCore", 4 * S, Color3.fromRGB(210, 190, 255))
 
-local light = Instance.new("PointLight")
-light.Color = LENS_COLOR
-light.Range = 14 * S
-light.Brightness = 0.6
-light.Shadows = false
-light.Parent = outer
+-- Lights, in three layers. HollowLiftClient animates them (breathing,
+-- shimmer, colour drift, surges) relative to these starting values.
+local function addLight(class, name, parent, props)
+	local l = Instance.new(class)
+	l.Name = name
+	for k, v in pairs(props) do
+		l[k] = v
+	end
+	l:SetAttribute("BaseBrightness", l.Brightness)
+	l:SetAttribute("BaseRange", l.Range)
+	l.Parent = parent
+	return l
+end
+-- Main light: the whole area, casting shadows.
+addLight("PointLight", "OrbLight", outer, {
+	Color = LENS_COLOR, Range = 30, Brightness = 0.9, Shadows = true,
+})
+-- Floor light: straight down onto the crater, so the orbiting rocks' shadows
+-- sweep across the ground.
+addLight("SpotLight", "FloorLight", outer, {
+	Color = LENS_COLOR, Range = 30, Brightness = 0.8, Angle = 75, Face = Enum.NormalId.Bottom, Shadows = true,
+})
+-- Core light: small and bright, makes the orb and the grit round it glow.
+addLight("PointLight", "CoreLight", inner, {
+	Color = Color3.fromRGB(225, 230, 255), Range = 8 * S, Brightness = 1.4, Shadows = false,
+})
 
 local function seq(points)
 	local kp = {}
