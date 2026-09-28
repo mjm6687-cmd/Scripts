@@ -88,11 +88,11 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
     hip=(-0.06, -0.05, -0.26), hips=(22, 10, 1), chest=(4, -14),
-    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
+    arms=((50, 6, 0), (-60, 35, -28)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
     hip=(-0.12, 0, -0.38), hips=(26, 7, -5), chest=(8, -10),
-    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
+    arms=((42, 7, 0), (-48, 28, -22)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
     hip=(-0.08, -0.05, -0.26), hips=(23, 0, -3), chest=(5, 0),
@@ -100,7 +100,7 @@ PASS = P(  # planted foot under the body, other knee drives up and through
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
     hip=(-0.03, -0.1, 0.0), hips=(21, -8, 0), chest=(4, 12),
-    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
+    arms=((-55, -33, 26), (45, -6, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
 
 
 def mirror(pose):
