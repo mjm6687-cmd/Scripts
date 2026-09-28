@@ -44,15 +44,20 @@ def S(x, y, z):
 LEG = 2.0
 ARM_SWING = 1.3  # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
 ARM_DROP = 0.07  # studs the arms sit lower on the body (like grabbing them and pressing G, then moving down)
-REACH = 1.05 * LEG  # a touch over LEG: a planted leg reads as straight, not broken
+REACH = 1.05 * LEG      # a touch over LEG: a planted leg reads as straight, not broken
+MIN_REACH = 0.5 * LEG   # never pull the foot closer to the hip than this, or the knee folds and the IK flips
 
 
 def foot(hip, y, z):
-    """Foot target (y, z) in studs, shortened front-to-back if it's out of reach."""
+    """Foot target (y, z) in studs, kept between MIN_REACH and REACH from the hip."""
     hy, hz = hip[1], LEG + hip[2]
     dz = min(abs(z - hz), REACH)
     max_dy = math.sqrt(REACH ** 2 - dz ** 2)
     y = hy + max(-max_dy, min(max_dy, y - hy))
+    # Too close (a knee pulled right up under the hip): lower the foot until the leg has room.
+    dy = y - hy
+    if dy * dy + (z - hz) ** 2 < MIN_REACH ** 2:
+        z = hz - math.sqrt(max(MIN_REACH ** 2 - dy * dy, 0))
     return S(0, y, max(z, 0))
 
 
@@ -83,19 +88,19 @@ def P(hip, hips, chest, arms, rfoot, lfoot):
 # stays close to the side. Hips and chest twist hard against each other.
 CONTACT = P(  # right foot lands out in front, left arm forward and across
     hip=(-0.06, -0.05, -0.26), hips=(22, 10, 1), chest=(4, -14),
-    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.4, 0), lfoot=(1.3, 0.65))
+    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.4, 0), lfoot=(1.3, 0.5))
 
 IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
     hip=(-0.12, 0, -0.38), hips=(26, 7, -5), chest=(8, -10),
-    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.7, 0), lfoot=(0.6, 1.2))
+    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.7, 0), lfoot=(0.6, 0.9))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
     hip=(-0.08, -0.05, -0.26), hips=(23, 0, -3), chest=(5, 0),
-    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.25, 0), lfoot=(-0.55, 1.3))
+    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.25, 0), lfoot=(-0.55, 0.95))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
     hip=(-0.03, -0.1, 0.0), hips=(21, -8, 0), chest=(4, 12),
-    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.35, 0.35), lfoot=(-1.4, 0.6))
+    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.35, 0.3), lfoot=(-1.4, 0.45))
 
 
 def mirror(pose):
