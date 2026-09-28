@@ -73,20 +73,20 @@ def P(hip, hips, chest, head, arms, rfoot, lfoot):
 # The main forward lean is on LowerTorso-FK; Torso_FK adds chest bend/twist on top.
 # Hips twist toward the forward leg, chest twists the other way.
 CONTACT = P(  # right foot reaches out in front and hits the ground
-    hip=(-0.05, 0, -0.35), hips=(28, 6, 0), chest=(0, -14), head=-28,
-    arms=((35, 10), (-45, -10)), rfoot=(-1.0, 0), lfoot=(0.9, 0.35))
+    hip=(-0.05, 0, -0.12), hips=(18, 6, 0), chest=(0, -14), head=-18,
+    arms=((35, 10), (-45, -10)), rfoot=(-1.0, 0), lfoot=(0.9, 0.4))
 
 IMPACT = P(  # the weight lands: body sinks hard, chest crunches, hips tilt, head bobs
-    hip=(-0.12, 0.05, -0.6), hips=(34, 4, -4), chest=(4, -10), head=-33,
-    arms=((30, 12), (-38, -12)), rfoot=(-0.55, 0), lfoot=(0.55, 0.6))
+    hip=(-0.12, 0.05, -0.3), hips=(24, 4, -4), chest=(4, -10), head=-24,
+    arms=((30, 12), (-38, -12)), rfoot=(-0.55, 0), lfoot=(0.55, 0.75))
 
 PASS = P(  # planted foot under the body, other knee drives through
-    hip=(-0.08, 0, -0.45), hips=(30, 0, -3), chest=(2, 0), head=-31,
-    arms=((0, 10), (-5, -10)), rfoot=(0.1, 0), lfoot=(-0.3, 0.7))
+    hip=(-0.08, 0, -0.18), hips=(20, 0, -3), chest=(2, 0), head=-21,
+    arms=((0, 10), (-5, -10)), rfoot=(0.1, 0), lfoot=(-0.3, 0.9))
 
 PUSH = P(  # shove off the back foot, body rises and straightens a bit
-    hip=(-0.02, -0.05, -0.2), hips=(25, -4, 0), chest=(0, 8), head=-26,
-    arms=((-35, 10), (30, -10)), rfoot=(0.8, 0.05), lfoot=(-0.95, 0.35))
+    hip=(-0.02, -0.05, 0.0), hips=(15, -4, 0), chest=(0, 8), head=-15,
+    arms=((-35, 10), (30, -10)), rfoot=(0.8, 0.05), lfoot=(-0.95, 0.45))
 
 
 def mirror(pose):
