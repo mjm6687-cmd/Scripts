@@ -5,10 +5,10 @@
 	is pointing, turned to face the way you're looking (snapped to 90 degrees).
 	Run it again to move it: it deletes the old one first. Ctrl+Z undoes it.
 
-	The pad only: a thin concrete slab with a small bevel and slim drainage
-	grates, the green painted surface, fine markings (border, dashed inner
-	square, ticks, corner brackets, outer circle, amber dash ring, touchdown
-	circle, aiming marks, H), tie-down points and neon edge lights.
+	The pad only: the green painted surface (a thin plate on the ground), fine
+	markings (border, dashed inner square, ticks, corner brackets, outer circle,
+	amber dash ring, touchdown circle, aiming marks, H), tie-down points and
+	neon edge lights set into the surface, each with a PointLight.
 
 	PAD sets the size; every marking scales with it. Line widths are separate
 	and stay the same whatever the size.
@@ -40,16 +40,16 @@ local CIRCLE_SCALE = 0.82
 -- Edge lights (studs).
 local LIGHTS_PER_SIDE = 7
 local LIGHT_LENS = 0.22               -- glowing lens diameter
-local LIGHT_HEIGHT = 0.08
+local LIGHT_SHOW = 0.03               -- how far the lens sticks up out of the pad
+local LIGHT_RANGE = 6
+local LIGHT_BRIGHTNESS = 1
 
 -------------------------------------------------------------------------------
 
 local M = Enum.Material
 local MAT = {
-	slab    = { M.Concrete, "Large Concrete Tile", Color3.fromRGB(128, 128, 124) },
 	surface = { M.Concrete, "Flat Concrete Dark",  PAD_GREEN },
 	metal   = { M.Metal,    "Scuffed Iron",        Color3.fromRGB(88, 90, 88) },
-	grate   = { M.Metal,    "Metal Grate",         Color3.fromRGB(70, 72, 70) },
 	dark    = { M.SmoothPlastic, nil,              Color3.fromRGB(34, 36, 36) },
 	white   = { M.Concrete, nil,                   LINE_WHITE, true },
 	amber   = { M.Concrete, nil,                   LINE_AMBER, true },
@@ -59,11 +59,8 @@ local MAT = {
 local H = PAD / 2                     -- half of the green
 local K = H / 30                      -- scale for marking positions (1 at PAD 60)
 local C = K * CIRCLE_SCALE            -- scale for the middle group
-local SLAB_TOP = 0.5                  -- slab height
-local SURF = SLAB_TOP + 0.02          -- top of the green
+local SURF = 0.1                      -- top of the green (it's a plate this thick)
 local LINE = SURF + 0.02              -- top of the paint
-local S = H + 0.9                     -- half of the slab top
-local E = S + 0.7                     -- half of the slab at the ground (bevel)
 
 -------------------------------------------------------------------------------
 
@@ -157,33 +154,11 @@ end)
 
 local pad = Instance.new("Model")
 pad.Name = "Helipad"
-local slabF = group(pad, "Slab")
 local paint = group(pad, "Markings")
 local lights = group(pad, "Lights")
 
--- Slab, with a small bevel all round.
-local slab = box(slabF, "Slab", -S, 0, -S, S, SLAB_TOP, S, "slab")
-do
-	local run, rise = E - S, SLAB_TOP
-	local len, ang = math.sqrt(run * run + rise * rise), math.atan2(rise, run)
-	local t = 0.25
-	local up = Vector3.new(0, math.cos(ang), -math.sin(ang))
-	local mid = Vector3.new(0, rise / 2, -(E + S) / 2) - up * (t / 2)
-	for k = 0, 3 do
-		part(slabF, "Bevel", CFrame.Angles(0, k * math.pi / 2, 0) * CFrame.new(mid) * CFrame.Angles(-ang, 0, 0),
-			Vector3.new(2 * S, t, len), "slab")
-	end
-	for _, c in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
-		box(slabF, "Corner", c[1] * S, 0, c[2] * S, c[1] * E, SLAB_TOP * 0.45, c[2] * E, "slab")
-	end
-	-- Slim drainage grates in the concrete margin, north and south.
-	for _, sz in ipairs({ -1, 1 }) do
-		box(slabF, "Drain", -H + 2, SLAB_TOP - 0.15, sz * (H + 0.2), H - 2, SLAB_TOP + 0.01, sz * (H + 0.7), "grate")
-	end
-end
-
 -- Green surface.
-box(paint, "Surface", -H, SLAB_TOP, -H, H, SURF, H, "surface")
+local surface = box(paint, "Surface", -H, 0, -H, H, SURF, H, "surface")
 
 -- Border: thin solid line just in from the edge.
 local BORDER_C = H - 0.9 - W_BORDER / 2
@@ -248,11 +223,12 @@ end
 -- Tie-down points: small flush steel rings.
 for _, c in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
 	local x, z = c[1] * 8.5 * C, c[2] * 8.5 * C
-	cyl(paint, "TieDown", x, SLAB_TOP, z, SURF - SLAB_TOP + 0.015, 0.5, "metal")
+	cyl(paint, "TieDown", x, SURF - 0.05, z, 0.065, 0.5, "metal")
 	cyl(paint, "TieDownEye", x, SURF + 0.015, z, 0.01, 0.25, "dark")
 end
 
--- Edge lights: just the glowing lens, set into the edge of the green.
+-- Edge lights: the glowing lens, sunk into the green so only a sliver shows,
+-- each with a small PointLight.
 do
 	local d = H - 0.4
 	local step = 2 * d / LIGHTS_PER_SIDE
@@ -260,12 +236,18 @@ do
 		local rot = CFrame.Angles(0, k * math.pi / 2, 0)
 		for i = 0, LIGHTS_PER_SIDE - 1 do
 			local v = rot * Vector3.new(-d + i * step, 0, -d)
-			cyl(lights, "Light", v.X, SURF, v.Z, LIGHT_HEIGHT, LIGHT_LENS, "lens")
+			local lens = cyl(lights, "Light", v.X, SURF + LIGHT_SHOW - 0.08, v.Z, 0.08, LIGHT_LENS, "lens")
+			local pl = Instance.new("PointLight")
+			pl.Color = MAT.lens[3]
+			pl.Range = LIGHT_RANGE
+			pl.Brightness = LIGHT_BRIGHTNESS
+			pl.Shadows = false
+			pl.Parent = lens
 		end
 	end
 end
 
-pad.PrimaryPart = slab
+pad.PrimaryPart = surface
 pad.WorldPivot = ORIGIN_CF
 pad.Parent = workspace
 
