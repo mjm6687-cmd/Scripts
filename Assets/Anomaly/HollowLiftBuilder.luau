@@ -22,7 +22,9 @@
 	  * rising dust, grit and leaves from the crater floor
 	  * Wet: water droplets hanging above the floor (add the puddle in Terrain)
 	  * Deep: 1.6x bigger, with a car-sized boulder turning at the top
-	Everything is anchored and static; the particles are what move.
+	Everything is anchored. To make the rocks float round the orb, also put
+	StarterPlayer > StarterPlayerScripts > HollowLiftClient (LocalScript) in
+	the game; it finds this model by its "HollowLift" tag.
 ]]
 
 -- Upload the PNGs in Assets/Anomaly and paste their ids. A blank one just
@@ -499,6 +501,8 @@ end
 
 root.WorldPivot = CFrame.new(C)
 root.PrimaryPart = outer
+root:SetAttribute("OrbCentre", lensPos) -- HollowLiftClient orbits the rocks round this
+game:GetService("CollectionService"):AddTag(root, "HollowLift")
 root.Parent = workspace
 
 for _, t in ipairs(templates) do

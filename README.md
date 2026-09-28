@@ -146,6 +146,17 @@ gravity anomaly (ForceField lens, floating rocks and peeled slabs from your rock
 meshes, rising dust/grit/leaves) as `Workspace > HollowLift`. `VARIANT` = `Dry` /
 `Wet` / `Deep`. Rock mesh ids are in `ROCK_MESHES`; it doesn't touch Terrain.
 
+To make the rocks float round the orb, put `HollowLiftClient` in the game:
+
+```
+StarterPlayer
+└── StarterPlayerScripts
+    └── HollowLiftClient        LocalScript (orbits the anomaly's rocks, locally)
+```
+
+It finds every anomaly by its `HollowLift` tag, animates only the ones near the
+camera, and touches nothing but the rocks (no camera or screen effects).
+
 Particle textures are in `Assets/Anomaly/` (`dust.png`, `grit.png`, `leaf.png`,
 `ring.png`, made by `generate_textures.py`). Upload them to Roblox and paste the ids
 into `TEXTURES` at the top of the builder; without them it uses Roblox's built-in
