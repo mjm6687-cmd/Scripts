@@ -167,16 +167,16 @@ PASSIVE = [
 LUNGE = dict(rfoot=(0, -0.65, 0), lfoot=(0, 0.2, 0))
 AGGRESSIVE = [
     (0.00, P()),
-    (0.10, P(hip=(0, 0.1, -0.35), lean=4, chest=-6, head=10, arms=(18, 20))),       # coil
+    (0.10, P(hip=(0, 0.1, -0.35), lean=4, chest=-6, head=6, arms=(18, 20))),        # coil
     (0.22, P(hip=(0, 0.05, -0.3), lean=10, chest=-2, head=0, arms=(10, 22),         # foot lifts
              rfoot=(0, -0.3, 0.25))),
-    (0.34, P(hip=(0, -0.25, -0.6), lean=30, twist=6, chest=8, head=-18,             # lunge lands with the hit
+    (0.34, P(hip=(0, -0.25, -0.6), lean=30, twist=6, chest=8, head=-6,              # lunge lands with the hit
              arms=(-25, 32), **LUNGE)),
 ] + roar_hold(0.38, 1.04, 0.05, ENV_AGGRESSIVE, sweep=6, period=0.35,
-              quiet=dict(hip=(0, -0.2, -0.5), lean=22, twist=5, chest=5, head=-6, arms=(-10, 26), **LUNGE),
-              loud=dict(hip=(0, -0.27, -0.66), lean=33, twist=6, chest=9, head=-18, arms=(-30, 36), **LUNGE),
-              shake=dict(hip_z=0.03, lean=2, chest=2, head=3, arm=3)) + [
-    (1.18, P(hip=(0, -0.1, -0.4), lean=16, head=8, arms=(0, 14),                  # pull back, foot returns
+              quiet=dict(hip=(0, -0.2, -0.5), lean=22, twist=5, chest=5, head=-2, arms=(-10, 26), **LUNGE),
+              loud=dict(hip=(0, -0.27, -0.66), lean=33, twist=6, chest=9, head=-8, arms=(-30, 36), **LUNGE),
+              shake=dict(hip_z=0.03, lean=2, chest=2, head=1.5, arm=3)) + [
+    (1.18, P(hip=(0, -0.1, -0.4), lean=16, head=4, arms=(0, 14),                  # pull back, foot returns
              rfoot=(0, -0.35, 0.22))),
     (1.38, P()),
 ]
