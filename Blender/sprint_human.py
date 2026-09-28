@@ -42,8 +42,8 @@ def S(x, y, z):
 
 # Leg reach limit (studs). Feet are pulled in so the IK never over-stretches.
 LEG = 2.0
-ARM_SWING = 1.0  # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
-ARM_DROP = 0.0   # studs the arms sit lower on the body (like grabbing them and pressing G, then moving down)
+ARM_SWING = 1.3  # how much the arms swing (1 = full human-like swing, 0 = arms stay still)
+ARM_DROP = 0.07  # studs the arms sit lower on the body (like grabbing them and pressing G, then moving down)
 REACH = 1.05 * LEG  # a touch over LEG: a planted leg reads as straight, not broken
 
 
