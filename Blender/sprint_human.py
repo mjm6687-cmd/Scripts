@@ -56,18 +56,21 @@ def foot(hip, y, z):
     return S(0, y, max(z, 0))
 
 
-def P(hip, hips, chest, head, arms, rfoot, lfoot):
-    """One pose of the stride.
+def P(hip, hips, chest, arms, rfoot, lfoot):
+    """One pose of the stride. The head is never keyed: it stays level with the body.
     hip:   (x, y, z) body offset in studs      hips:  (lean, twist, tilt) of LowerTorso-FK
-    chest: (bend, twist) extra on Torso_FK       head:  pitch (counters the lean to look ahead)
-    arms:  ((right pitch, roll), (left pitch, roll))   rfoot/lfoot: (y, z) in studs
+    chest: (bend, twist) extra on Torso_FK
+    arms:  ((right pitch, roll, twist), (left pitch, roll, twist))   rfoot/lfoot: (y, z) in studs
+           pitch - = forward; roll + = out for the right arm, - = out for the left;
+           twist turns the arm on its own length (+ turns the right arm inward)
     """
+    def arm(a):
+        return [(YAW, a[2]), (PITCH, a[0] * ARM_SWING), (ROLL, a[1])]
     return {
         HIP_BONE:      ([(PITCH, hips[0]), (YAW, hips[1]), (ROLL, hips[2])], S(*hip)),
         "Torso_FK":    ([(PITCH, chest[0]), (YAW, chest[1])], None),
-        "Head":        ([(PITCH, head)], None),
-        "RightArm_FK": ([(PITCH, arms[0][0] * ARM_SWING), (ROLL, arms[0][1])], S(0, 0, -ARM_DROP)),
-        "LeftArm_FK":  ([(PITCH, arms[1][0] * ARM_SWING), (ROLL, arms[1][1])], S(0, 0, -ARM_DROP)),
+        "RightArm_FK": (arm(arms[0]), S(0, 0, -ARM_DROP)),
+        "LeftArm_FK":  (arm(arms[1]), S(0, 0, -ARM_DROP)),
         "RightLeg-IK": ([], foot(hip, *rfoot)),
         "LeftLeg-IK":  ([], foot(hip, *lfoot)),
     }
@@ -76,21 +79,23 @@ def P(hip, hips, chest, head, arms, rfoot, lfoot):
 # --- Poses for the RIGHT-foot step (the left step is mirrored automatically) ---
 # The main forward lean is on LowerTorso-FK; Torso_FK adds chest bend/twist on top.
 # Hips twist toward the forward leg, chest twists the other way.
-CONTACT = P(  # right foot lands out in front, left arm forward
-    hip=(-0.03, -0.05, -0.18), hips=(14, 5, 0), chest=(2, -8), head=-14,
-    arms=((50, 6), (-60, -6)), rfoot=(-1.2, 0), lfoot=(1.05, 0.5))
+# The forward arm swings in across the chest and turns inward; the back arm
+# stays close to the side. Hips and chest twist hard against each other.
+CONTACT = P(  # right foot lands out in front, left arm forward and across
+    hip=(-0.06, -0.05, -0.18), hips=(14, 10, 1), chest=(2, -14),
+    arms=((50, 6, 0), (-60, 16, -14)), rfoot=(-1.2, 0), lfoot=(1.05, 0.5))
 
-IMPACT = P(  # weight lands: body dips, a little crunch through the chest
-    hip=(-0.08, 0, -0.32), hips=(18, 3, -3), chest=(4, -6), head=-18,
-    arms=((42, 7), (-48, -7)), rfoot=(-0.6, 0), lfoot=(0.55, 0.95))
+IMPACT = P(  # weight lands: body dips, chest crunches, hips drop to the landing side
+    hip=(-0.12, 0, -0.32), hips=(18, 7, -5), chest=(6, -10),
+    arms=((42, 7, 0), (-48, 13, -11)), rfoot=(-0.6, 0), lfoot=(0.55, 0.95))
 
 PASS = P(  # planted foot under the body, other knee drives up and through
-    hip=(-0.05, -0.05, -0.2), hips=(15, 0, -2), chest=(3, 0), head=-15,
-    arms=((0, 6), (-5, -6)), rfoot=(0.2, 0), lfoot=(-0.45, 1.05))
+    hip=(-0.08, -0.05, -0.2), hips=(15, 0, -3), chest=(3, 0),
+    arms=((0, 6, 0), (-5, -6, 0)), rfoot=(0.2, 0), lfoot=(-0.45, 1.05))
 
 PUSH = P(  # drive off the back foot: both feet leave the ground briefly
-    hip=(-0.02, -0.08, -0.05), hips=(13, -4, 0), chest=(2, 7), head=-13,
-    arms=((-55, 6), (45, -6)), rfoot=(1.1, 0.25), lfoot=(-1.15, 0.5))
+    hip=(-0.03, -0.08, -0.05), hips=(13, -8, 0), chest=(2, 12),
+    arms=((-55, -15, 13), (45, -6, 0)), rfoot=(1.1, 0.25), lfoot=(-1.15, 0.5))
 
 
 def mirror(pose):
@@ -115,8 +120,8 @@ KEYS = [
     (1.00, CONTACT),
 ]
 
-# Arms and head trail the body slightly so they swing with weight instead of snapping.
-LAG = {"Head": 0.05, "RightArm_FK": 0.04, "LeftArm_FK": 0.04}
+# Arms trail the body slightly so they swing with weight instead of snapping.
+LAG = {"RightArm_FK": 0.04, "LeftArm_FK": 0.04}
 
 
 def key(bone_name, frame, rots, loc):
