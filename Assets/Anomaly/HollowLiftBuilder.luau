@@ -56,7 +56,6 @@ local ROCK_MESHES = {
 -- false: leave them as they load (CreateMeshPartAsync doesn't bring a texture).
 local USE_ROCK_MATERIAL = true
 
-local HUM_SOUND = ""        -- optional looped hum, "rbxassetid://..."
 local VARIANT = "Dry"       -- "Dry", "Wet" or "Deep"
 local SEED = 7              -- change for a different arrangement
 
@@ -382,16 +381,6 @@ if TEXTURES.Wisp ~= "" then
 	end
 end
 
-if HUM_SOUND ~= "" then
-	local s = Instance.new("Sound")
-	s.Name = "Hum"
-	s.SoundId = HUM_SOUND
-	s.Looped = true
-	s.Volume = 0.5
-	s.RollOffMaxDistance = 60 * S
-	s.Playing = true
-	s.Parent = outer
-end
 
 -------------------------------------------------------------------------------
 -- Rocks

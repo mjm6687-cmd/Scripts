@@ -8,8 +8,12 @@
 --   * ORB LIGHTS: they breathe (brightness and reach swell and ease), shimmer
 --     unevenly, drift between blue and violet, and every half minute or so
 --     surge: flare brighter, whiter and wider, then fade back.
--- Only the anomaly's own rocks and lights are touched: no camera, Lighting
--- service or screen effects.
+--   * SOUNDS (once their ids are filled in below): a drone from the orb that
+--     breathes and lifts with the surges, soft air from the crater, a swell
+--     at each surge, and stone creaks and pebble clacks from the floating
+--     rocks now and then. All 3D, played locally, only when you're near.
+-- Only the anomaly's own rocks, lights and sounds are touched: no camera,
+-- Lighting service or screen effects.
 --
 -- Finds anomalies by the "HollowLift" tag (the builder adds it) or by the
 -- name HollowLift. Rocks are the parts named Grit, Rock, Boulder and Slab
@@ -45,6 +49,26 @@ local LIGHT = {
 	OrbLight   = { breathe = 1,   surge = 1,   range = true },
 	FloorLight = { breathe = 0.8, surge = 0.7, range = false },
 	CoreLight  = { breathe = 1.2, surge = 1.6, range = true },
+}
+
+-- Sound ids ("rbxassetid://..."); upload the files in Assets/Anomaly/sounds.
+-- Blank ones are skipped.
+local SOUNDS = {
+	Hum = "",                -- hum_loop.ogg
+	Air = "",                -- air_loop.ogg
+	Surge = "",              -- surge.ogg
+	Creaks = { "", "", "" }, -- rock_creak_1/2/3.ogg
+	Clacks = { "", "" },     -- pebble_clack_1/2.ogg
+}
+local SOUND = {
+	hearDistance = 80,        -- sounds start/stop within this range of the camera
+	humVolume = 0.6,
+	airVolume = 0.35,
+	surgeVolume = 0.8,
+	creakVolume = { 0.25, 0.5 },
+	clackVolume = { 0.2, 0.4 },
+	creakEvery = { 3, 8 },    -- seconds between creaks
+	clackEvery = { 2, 6 },
 }
 
 local KINDS = {
@@ -159,6 +183,7 @@ end
 local function untrack(model: Instance)
 	local entry = anomalies[model]
 	if entry then
+		stopSounds(entry)
 		entry.added:Disconnect()
 		entry.removing:Disconnect()
 		anomalies[model] = nil
@@ -231,6 +256,136 @@ local function animateLights(entry, t: number)
 			light.Color = colour
 		end
 	end
+	return breathe, surge
+end
+
+-------------------------------------------------------------------------------
+-- Sounds
+-------------------------------------------------------------------------------
+local Debris = game:GetService("Debris")
+local soundRng = Random.new()
+
+local function has(id)
+	return type(id) == "string" and id ~= ""
+end
+local function pickId(list)
+	local ok = {}
+	for _, id in ipairs(list) do
+		if has(id) then
+			table.insert(ok, id)
+		end
+	end
+	return #ok > 0 and ok[soundRng:NextInteger(1, #ok)] or nil
+end
+
+local function newSound(parent, id, volume, maxDist, looped)
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = volume
+	s.Looped = looped == true
+	s.RollOffMode = Enum.RollOffMode.InverseTapered
+	s.RollOffMinDistance = 6
+	s.RollOffMaxDistance = maxDist
+	s.Parent = parent
+	return s
+end
+
+-- A local attachment in Terrain to play a sound from a point in space.
+local function anchorAt(pos: Vector3)
+	local a = Instance.new("Attachment")
+	a.Name = "HollowLiftSound"
+	a.WorldPosition = pos
+	a.Parent = workspace.Terrain
+	return a
+end
+
+local function floorOf(entry): Vector3
+	for _, d in ipairs(entry.model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name == "DustSource" then
+			return d.Position
+		end
+	end
+	return entry.centre - Vector3.new(0, 12, 0)
+end
+
+local function startSounds(entry)
+	entry.sounding = true
+	entry.orbAnchor = anchorAt(entry.centre)
+	if has(SOUNDS.Hum) then
+		entry.hum = newSound(entry.orbAnchor, SOUNDS.Hum, SOUND.humVolume, 70, true)
+		entry.hum:Play()
+	end
+	if has(SOUNDS.Air) then
+		entry.airAnchor = anchorAt(floorOf(entry))
+		entry.air = newSound(entry.airAnchor, SOUNDS.Air, SOUND.airVolume, 45, true)
+		entry.air:Play()
+	end
+	entry.nextCreak = os.clock() + soundRng:NextNumber(1, SOUND.creakEvery[2])
+	entry.nextClack = os.clock() + soundRng:NextNumber(1, SOUND.clackEvery[2])
+end
+
+local function stopSounds(entry)
+	entry.sounding = false
+	for _, k in ipairs({ "orbAnchor", "airAnchor" }) do
+		if entry[k] then
+			entry[k]:Destroy() -- takes its sounds with it
+			entry[k] = nil
+		end
+	end
+	entry.hum, entry.air = nil, nil
+end
+
+-- A one-shot from a random rock (optionally only rocks named `only`).
+local function fromRandomRock(entry, id, volRange, only)
+	local list = {}
+	for part in pairs(entry.rocks) do
+		if part.Parent and (not only or part.Name == only) then
+			table.insert(list, part)
+		end
+	end
+	if #list == 0 or not id then
+		return
+	end
+	local rock = list[soundRng:NextInteger(1, #list)]
+	local s = newSound(rock, id, soundRng:NextNumber(volRange[1], volRange[2]), 45)
+	s.PlaybackSpeed = soundRng:NextNumber(0.85, 1.15)
+	s:Play()
+	Debris:AddItem(s, 5)
+end
+
+local function updateSounds(entry, breathe: number, surge: number, near: boolean)
+	if near and not entry.sounding then
+		startSounds(entry)
+	elseif not near and entry.sounding then
+		stopSounds(entry)
+	end
+	if not entry.sounding then
+		entry.lastSurge = surge
+		return
+	end
+	if entry.hum then
+		entry.hum.Volume = SOUND.humVolume * (0.8 + 0.2 * breathe + 0.35 * surge)
+		entry.hum.PlaybackSpeed = 1 + 0.03 * surge
+	end
+	if entry.air then
+		entry.air.Volume = SOUND.airVolume * (0.85 + 0.15 * breathe + 0.5 * surge)
+	end
+	-- Surge one-shot on the rising edge of each surge.
+	if surge > 0 and (entry.lastSurge or 0) == 0 and has(SOUNDS.Surge) then
+		local s = newSound(entry.orbAnchor, SOUNDS.Surge, SOUND.surgeVolume, 90)
+		s:Play()
+		Debris:AddItem(s, 6)
+	end
+	entry.lastSurge = surge
+	local now = os.clock()
+	if now >= entry.nextCreak then
+		entry.nextCreak = now + soundRng:NextNumber(SOUND.creakEvery[1], SOUND.creakEvery[2])
+		fromRandomRock(entry, pickId(SOUNDS.Creaks), SOUND.creakVolume, "Rock")
+	end
+	if now >= entry.nextClack then
+		entry.nextClack = now + soundRng:NextNumber(SOUND.clackEvery[1], SOUND.clackEvery[2])
+		fromRandomRock(entry, pickId(SOUNDS.Clacks), SOUND.clackVolume, "Grit")
+	end
 end
 
 local parts, cframes = {}, {}
@@ -244,14 +399,18 @@ RunService.Heartbeat:Connect(function()
 	table.clear(parts)
 	table.clear(cframes)
 	for _, entry in pairs(anomalies) do
-		if (entry.centre - camPos).Magnitude <= CULL_DISTANCE then
-			animateLights(entry, t)
+		local dist = (entry.centre - camPos).Magnitude
+		if dist <= CULL_DISTANCE then
+			local breathe, surge = animateLights(entry, t)
+			updateSounds(entry, breathe, surge, dist <= SOUND.hearDistance)
 			local centreCF = CFrame.new(entry.centre)
 			for part, info in pairs(entry.rocks) do
 				info.centreCF = centreCF
 				table.insert(parts, part)
 				table.insert(cframes, place(info, t))
 			end
+		elseif entry.sounding then
+			stopSounds(entry)
 		end
 	end
 	if #parts > 0 then

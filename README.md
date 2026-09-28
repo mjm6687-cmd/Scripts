@@ -155,7 +155,10 @@ StarterPlayer
 ```
 
 It finds every anomaly by its `HollowLift` tag, animates only the ones near the
-camera, and touches nothing but the rocks (no camera or screen effects).
+camera, and touches nothing but the anomaly's rocks, lights and sounds (no camera
+or screen effects). Sounds are in `Assets/Anomaly/sounds/` (made by
+`generate_sounds.py`); upload them and paste the ids into `SOUNDS` at the top of
+`HollowLiftClient`.
 
 Particle textures are in `Assets/Anomaly/` (`dust.png`, `grit.png`, `leaf.png`,
 `ring.png`, made by `generate_textures.py`). Upload them to Roblox and paste the ids
